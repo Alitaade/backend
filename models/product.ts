@@ -1,0 +1,365 @@
+import { query } from "../database/connection"
+
+export interface Product {
+  id: number
+  name: string
+  description: string | null
+  price: number
+  category_id: number | null
+  stock_quantity: number
+  created_at: Date
+  updated_at: Date
+}
+
+export interface ProductInput {
+  name: string
+  description?: string
+  price: number
+  category_id?: number
+  stock_quantity?: number
+}
+
+export interface ProductSize {
+  id: number
+  product_id: number
+  size: string
+  stock_quantity: number
+}
+
+// Update the ProductImage interface to include width and height properties
+export interface ProductImage {
+  id: number
+  product_id: number
+  image_url: string
+  is_primary: boolean
+  width?: number
+  height?: number
+  alt_text?: string
+  created_at: Date
+}
+
+export interface ProductWithDetails extends Product {
+  category_name?: string
+  images: ProductImage[]
+  sizes: ProductSize[]
+}
+
+export const getAllProducts = async (limit = 50, offset = 0, category_id?: number): Promise<ProductWithDetails[]> => {
+  try {
+    let queryText = `
+      SELECT p.*, c.name as category_name
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+    `
+
+    const queryParams: any[] = []
+    let paramCounter = 1
+
+    if (category_id) {
+      queryText += ` WHERE p.category_id = $${paramCounter++}`
+      queryParams.push(category_id)
+    }
+
+    queryText += ` ORDER BY p.created_at DESC LIMIT $${paramCounter++} OFFSET $${paramCounter++}`
+    queryParams.push(limit, offset)
+
+    const productsResult = await query(queryText, queryParams)
+    const products = productsResult.rows
+
+    // Get images and sizes for each product
+    const productsWithDetails: ProductWithDetails[] = []
+
+    for (const product of products) {
+      const imagesResult = await query("SELECT * FROM product_images WHERE product_id = $1 ORDER BY is_primary DESC", [
+        product.id,
+      ])
+
+      const sizesResult = await query("SELECT * FROM product_sizes WHERE product_id = $1", [product.id])
+
+      productsWithDetails.push({
+        ...product,
+        images: imagesResult.rows,
+        sizes: sizesResult.rows,
+      })
+    }
+
+    return productsWithDetails
+  } catch (error) {
+    console.error("Error getting all products:", error)
+    throw error
+  }
+}
+
+export const getProductById = async (id: number): Promise<ProductWithDetails | null> => {
+  try {
+    const productResult = await query(
+      `
+      SELECT p.*, c.name as category_name
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+      WHERE p.id = $1
+      `,
+      [id],
+    )
+
+    if (productResult.rows.length === 0) {
+      return null
+    }
+
+    const product = productResult.rows[0]
+
+    // Get images
+    const imagesResult = await query("SELECT * FROM product_images WHERE product_id = $1 ORDER BY is_primary DESC", [
+      id,
+    ])
+
+    // Get sizes
+    const sizesResult = await query("SELECT * FROM product_sizes WHERE product_id = $1", [id])
+
+    return {
+      ...product,
+      images: imagesResult.rows,
+      sizes: sizesResult.rows,
+    }
+  } catch (error) {
+    console.error("Error getting product by ID:", error)
+    throw error
+  }
+}
+
+// Update the createProduct function to handle image dimensions
+export const createProduct = async (
+  productData: ProductInput,
+  sizes?: { size: string; stock_quantity: number }[],
+  images?: { image_url: string; is_primary?: boolean; width?: number; height?: number; alt_text?: string }[],
+): Promise<ProductWithDetails> => {
+  try {
+    // Start a transaction
+    await query("BEGIN")
+
+    // Insert the product
+    const productResult = await query(
+      "INSERT INTO products (name, description, price, category_id, stock_quantity) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      [
+        productData.name,
+        productData.description || null,
+        productData.price,
+        productData.category_id || null,
+        productData.stock_quantity || 0,
+      ],
+    )
+
+    const product = productResult.rows[0]
+
+    // Insert sizes if provided
+    if (sizes && sizes.length > 0) {
+      for (const size of sizes) {
+        await query("INSERT INTO product_sizes (product_id, size, stock_quantity) VALUES ($1, $2, $3)", [
+          product.id,
+          size.size,
+          size.stock_quantity,
+        ])
+      }
+    }
+
+    // Insert images if provided
+    if (images && images.length > 0) {
+      for (const image of images) {
+        await query(
+          "INSERT INTO product_images (product_id, image_url, is_primary, width, height, alt_text) VALUES ($1, $2, $3, $4, $5, $6)",
+          [
+            product.id,
+            image.image_url,
+            image.is_primary || false,
+            image.width || null,
+            image.height || null,
+            image.alt_text || null,
+          ],
+        )
+      }
+    }
+
+    // Commit the transaction
+    await query("COMMIT")
+
+    // Return the product with details
+    return getProductById(product.id) as Promise<ProductWithDetails>
+  } catch (error) {
+    // Rollback the transaction in case of error
+    await query("ROLLBACK")
+    console.error("Error creating product:", error)
+    throw error
+  }
+}
+
+export const updateProduct = async (
+  id: number,
+  productData: Partial<ProductInput>,
+): Promise<ProductWithDetails | null> => {
+  try {
+    // Start building the query
+    let queryText = "UPDATE products SET "
+    const queryParams: any[] = []
+    let paramCounter = 1
+
+    // Add each field that needs to be updated
+    const updates: string[] = []
+
+    if (productData.name !== undefined) {
+      updates.push(`name = $${paramCounter++}`)
+      queryParams.push(productData.name)
+    }
+
+    if (productData.description !== undefined) {
+      updates.push(`description = $${paramCounter++}`)
+      queryParams.push(productData.description)
+    }
+
+    if (productData.price !== undefined) {
+      updates.push(`price = $${paramCounter++}`)
+      queryParams.push(productData.price)
+    }
+
+    if (productData.category_id !== undefined) {
+      updates.push(`category_id = $${paramCounter++}`)
+      queryParams.push(productData.category_id)
+    }
+
+    if (productData.stock_quantity !== undefined) {
+      updates.push(`stock_quantity = $${paramCounter++}`)
+      queryParams.push(productData.stock_quantity)
+    }
+
+    // Add updated_at timestamp
+    updates.push(`updated_at = $${paramCounter++}`)
+    queryParams.push(new Date())
+
+    // If there's nothing to update, return the current product
+    if (updates.length === 0) {
+      return getProductById(id)
+    }
+
+    // Complete the query
+    queryText += updates.join(", ")
+    queryText += ` WHERE id = $${paramCounter} RETURNING *`
+    queryParams.push(id)
+
+    // Execute the query
+    const result = await query(queryText, queryParams)
+
+    if (result.rows.length === 0) {
+      return null
+    }
+
+    // Return the updated product with details
+    return getProductById(id)
+  } catch (error) {
+    console.error("Error updating product:", error)
+    throw error
+  }
+}
+
+export const deleteProduct = async (id: number): Promise<boolean> => {
+  try {
+    // Start a transaction
+    await query("BEGIN")
+
+    // Delete related records first
+    await query("DELETE FROM product_images WHERE product_id = $1", [id])
+    await query("DELETE FROM product_sizes WHERE product_id = $1", [id])
+
+    // Delete the product
+    const result = await query("DELETE FROM products WHERE id = $1 RETURNING id", [id])
+
+    // Commit the transaction
+    await query("COMMIT")
+
+    return result.rows.length > 0
+  } catch (error) {
+    // Rollback the transaction in case of error
+    await query("ROLLBACK")
+    console.error("Error deleting product:", error)
+    throw error
+  }
+}
+
+// Update the addProductImage function to include width, height, and alt_text
+export const addProductImage = async (
+  product_id: number,
+  image_url: string,
+  is_primary = false,
+  width?: number,
+  height?: number,
+  alt_text?: string,
+): Promise<ProductImage> => {
+  try {
+    // If this is a primary image, update all other images to non-primary
+    if (is_primary) {
+      await query("UPDATE product_images SET is_primary = false WHERE product_id = $1", [product_id])
+    }
+
+    const result = await query(
+      "INSERT INTO product_images (product_id, image_url, is_primary, width, height, alt_text) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+      [product_id, image_url, is_primary, width || null, height || null, alt_text || null],
+    )
+
+    return result.rows[0]
+  } catch (error) {
+    console.error("Error adding product image:", error)
+    throw error
+  }
+}
+
+export const deleteProductImage = async (id: number): Promise<boolean> => {
+  try {
+    const result = await query("DELETE FROM product_images WHERE id = $1 RETURNING id", [id])
+    return result.rows.length > 0
+  } catch (error) {
+    console.error("Error deleting product image:", error)
+    throw error
+  }
+}
+
+export const updateProductSize = async (
+  product_id: number,
+  size: string,
+  stock_quantity: number,
+): Promise<ProductSize> => {
+  try {
+    // Check if the size already exists for this product
+    const existingSize = await query("SELECT * FROM product_sizes WHERE product_id = $1 AND size = $2", [
+      product_id,
+      size,
+    ])
+
+    if (existingSize.rows.length > 0) {
+      // Update existing size
+      const result = await query(
+        "UPDATE product_sizes SET stock_quantity = $1 WHERE product_id = $2 AND size = $3 RETURNING *",
+        [stock_quantity, product_id, size],
+      )
+      return result.rows[0]
+    } else {
+      // Insert new size
+      const result = await query(
+        "INSERT INTO product_sizes (product_id, size, stock_quantity) VALUES ($1, $2, $3) RETURNING *",
+        [product_id, size, stock_quantity],
+      )
+      return result.rows[0]
+    }
+  } catch (error) {
+    console.error("Error updating product size:", error)
+    throw error
+  }
+}
+
+export const deleteProductSize = async (id: number): Promise<boolean> => {
+  try {
+    const result = await query("DELETE FROM product_sizes WHERE id = $1 RETURNING id", [id])
+    return result.rows.length > 0
+  } catch (error) {
+    console.error("Error deleting product size:", error)
+    throw error
+  }
+}
+

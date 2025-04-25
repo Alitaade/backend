@@ -1,0 +1,48 @@
+{
+  "name": "fashion-ecommerce-api",
+  "version": "1.0.0",
+  "description": "Backend API for fashion e-commerce website",
+  "scripts": {
+    "dev": "next dev",
+    "build": "npm run seed && next build",
+    "start": "next start",
+    "lint": "next lint",
+    "seed": "ts-node database/seed.ts"
+  },
+  "keywords": [
+    "ecommerce",
+    "fashion",
+    "api",
+    "nextjs"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.8.4",
+    "bcryptjs": "^2.4.3",
+    "google-auth-library": "^8.8.0",
+    "jsonwebtoken": "^9.0.2",
+    "next": "latest",
+    "node-cache": "^5.1.2",
+    "qs": "^6.14.0",
+    "lru-cache": "^11.1.0",
+    "crypto": "^1.0.1",
+    "pg": "^8.11.3",
+    "express": "^5.1.0",
+    "react": "latest",
+    "react-dom": "latest",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/next": "latest",
+    "@types/node": "^20.11.5",
+    "@types/pg": "^8.10.9",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@types/uuid": "^9.0.7",
+    "ts-node": "^10.9.2",
+    "typescript": "latest"
+  }
+}

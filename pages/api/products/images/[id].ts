@@ -1,0 +1,19 @@
+import type { NextApiRequest, NextApiResponse } from "next"
+import { deleteImage } from "../../../../controllers/product-controller"
+import { requireAdmin } from "../../../../middleware/auth-middleware"
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  switch (req.method) {
+    case "DELETE":
+      // Admin only - delete a product image
+      return new Promise<void>((resolve) => {
+        requireAdmin(req, res, () => {
+          deleteImage(req, res).finally(() => resolve())
+        })
+      })
+
+    default:
+      return res.status(405).json({ error: "Method not allowed" })
+  }
+}
+
