@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next"
-import { getSalesReport } from "../../../controllers/admin-controller"
+import { getSalesReport } from "@/controllers/admin-controller"
 import { requireAdmin } from "../../../middleware/auth-middleware"
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
