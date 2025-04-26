@@ -6,6 +6,9 @@ const allowedOrigins = [
   "https://www.onlu.vercel.app",
   "https://pro-project-gilt.vercel.app",
   "https://www.pro-project-gilt.vercel.app",
+  // Admin frontend domains
+  "https://admin-frontends.vercel.app",
+  "https://www.admin-frontends.vercel.app",
   // Add your production domains here
 ];
 
@@ -43,37 +46,46 @@ export const corsMiddleware = (
   next: () => void
 ) => {
   // Get the origin from the request headers
-  const origin = req.headers.origin || "";
+  const origin = req.headers.origin as string || "";
 
   // Check if the origin is in our list of allowed origins
-  const isAllowedOrigin =
-    allowedOrigins.includes(origin as string) ||
-    process.env.NODE_ENV === "development";
+  const isAllowedOrigin = allowedOrigins.includes(origin) || 
+    (process.env.NODE_ENV === "development" && origin.startsWith("http://localhost"));
 
-  // Set CORS headers based on origin validation
+  // Important: When credentials are included, we must specify an exact origin
+  // not a wildcard (*) in the Access-Control-Allow-Origin header
   if (isAllowedOrigin) {
+    // Set the specific origin instead of wildcard
     res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
   } else {
-    // For security, we set a default allowed origin if the request origin is not allowed
-    res.setHeader("Access-Control-Allow-Origin", allowedOrigins[0]);
+    // For non-allowed origins, we still need to respond to the OPTIONS request
+    // but we won't include credentials
+    console.warn(`Blocked request from unauthorized origin: ${origin}`);
+    if (req.method === "OPTIONS") {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Credentials", "false");
+    } else {
+      return res.status(403).json({ error: "Origin not allowed" });
+    }
   }
 
   // Set other CORS headers
   res.setHeader(
     "Access-Control-Allow-Methods",
-    "GET, POST, PUT, DELETE, OPTIONS"
+    "GET, POST, PUT, DELETE, PATCH, OPTIONS"
   );
+  
   // Update the Access-Control-Allow-Headers list
   res.setHeader(
     "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-API-Key, x-api-key, authorization"
+    "Content-Type, Authorization, X-API-Key, x-api-key, authorization, X-CSRF-Token"
   );
-  res.setHeader("Access-Control-Allow-Credentials", "true");
 
-  // Handle preflight requests - IMPORTANT: Return immediately for OPTIONS
+  // Handle preflight requests
   if (req.method === "OPTIONS") {
     res.status(200).end();
-    return;
+    return;  // Important: Stop execution here for OPTIONS requests
   }
 
   next();
@@ -89,7 +101,7 @@ export const rateLimitMiddleware = (
 ) => {
   // Get client IP
   const clientIp =
-    req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown";
+    (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown";
 
   const key = `${clientIp}-${req.url}`;
   const now = Date.now();
@@ -142,7 +154,7 @@ export const applyApiSecurity = (
 ) => {
   // Apply CORS first
   corsMiddleware(req, res, () => {
-    // Skip other middleware for OPTIONS requests
+    // Skip other middleware for OPTIONS requests - middleware already handled it
     if (req.method === "OPTIONS") {
       return;
     }
