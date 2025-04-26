@@ -5,7 +5,17 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  
+  // Handle CORS preflight request (OPTIONS)
+  if (req.method === "OPTIONS") {
+    res.setHeader("Access-Control-Allow-Origin", "*"); // Or your specific origin
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization"
+    );
+    return res.status(200).end();
+  }
+
   // Only allow GET method for actual requests
   if (req.method !== "GET") {
     res.setHeader("Allow", ["GET"]); // Tell client what methods are allowed
