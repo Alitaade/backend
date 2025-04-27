@@ -4,8 +4,7 @@ import { createNewCategory, getCategories } from "../../../controllers/category-
 import { requireAdmin, handleCors, setCorsHeaders } from "../../../middleware/auth-middleware"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Handle CORS preflight request
-  if (handleCors(req, res)) return
+
 
   try {
     switch (req.method) {

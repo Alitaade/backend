@@ -1,172 +1,121 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import jwt from "jsonwebtoken";
 
-// List of allowed origins for CORS
-const allowedOrigins = [
-  "https://onlu.vercel.app",
-  "https://www.onlu.vercel.app",
-  "https://pro-project-gilt.vercel.app",
-  "https://www.pro-project-gilt.vercel.app",
-  // Add your production domains here
-];
-
-// Add localhost for development
-if (process.env.NODE_ENV === "development") {
-  allowedOrigins.push("http://localhost:3000");
-  allowedOrigins.push("http://localhost:3001");
+// JWT configuration
+const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_key";
+if (!JWT_SECRET) {
+  console.warn(
+    "Warning: JWT_SECRET environment variable not set, using fallback secret"
+  );
 }
 
-// API key validation
-export const validateApiKey = (
-  req: NextApiRequest,
-  res: NextApiResponse,
-  next: () => void
-) => {
-  // Skip API key validation in development
-  if (process.env.NODE_ENV === "development") {
-    return next();
-  }
+// Interface for decoded token
+interface DecodedToken {
+  userId: number;
+  email: string;
+  isAdmin: boolean;
+  iat?: number;
+  exp?: number;
+}
 
-  const apiKey = req.headers["x-api-key"];
-  const validApiKey = process.env.API_SECRET_KEY;
-
-  if (!apiKey || apiKey !== validApiKey) {
-    return res.status(401).json({ error: "Unauthorized - Invalid API key" });
-  }
-
-  next();
-};
-
-// CORS middleware
-export const corsMiddleware = (
-  req: NextApiRequest,
-  res: NextApiResponse,
-  next: () => void
-) => {
-  // Get the origin from the request headers
-  const origin = req.headers.origin || "";
-
-  // Check if the origin is in our list of allowed origins
-  const isAllowedOrigin =
-    allowedOrigins.includes(origin as string) ||
-    process.env.NODE_ENV === "development";
-
-  // Set CORS headers based on origin validation
-  if (isAllowedOrigin) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  } else {
-    // For security, we set a default allowed origin if the request origin is not allowed
-    res.setHeader("Access-Control-Allow-Origin", allowedOrigins[0]);
-  }
-
-  // Set other CORS headers
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, POST, PUT, DELETE, OPTIONS"
-  );
-  // Update the Access-Control-Allow-Headers list
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-API-Key, x-api-key, authorization"
-  );
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-
-  // Handle preflight requests - IMPORTANT: Return immediately for OPTIONS
-  if (req.method === "OPTIONS") {
-    res.status(200).end();
-    return;
-  }
-
-  next();
-};
-
-// Rate limiting middleware
-const requestCounts = new Map<string, { count: number; resetTime: number }>();
-
-export const rateLimitMiddleware = (
-  req: NextApiRequest,
-  res: NextApiResponse,
-  next: () => void
-) => {
-  // Get client IP
-  const clientIp =
-    req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown";
-
-  const key = `${clientIp}-${req.url}`;
-  const now = Date.now();
-  const windowMs = 60 * 1000; // 1 minute window
-  const maxRequests = 60; // Max requests per minute
-
-  // Get or initialize request count data
-  const requestData = requestCounts.get(key) || {
-    count: 0,
-    resetTime: now + windowMs,
+// Extended request interface with user property
+interface AuthenticatedRequest extends NextApiRequest {
+  user?: {
+    id: number;
+    email: string;
+    is_admin: boolean;
   };
+}
 
-  // Reset if outside window
-  if (now > requestData.resetTime) {
-    requestData.count = 0;
-    requestData.resetTime = now + windowMs;
-  }
-
-  // Increment request count
-  requestData.count++;
-  requestCounts.set(key, requestData);
-
-  // Check if rate limit exceeded
-  if (requestData.count > maxRequests) {
-    return res.status(429).json({
-      error: "Too many requests, please try again later",
-      retryAfter: Math.ceil((requestData.resetTime - now) / 1000),
-    });
-  }
-
-  // Set rate limit headers
-  res.setHeader("X-RateLimit-Limit", maxRequests.toString());
-  res.setHeader(
-    "X-RateLimit-Remaining",
-    (maxRequests - requestData.count).toString()
-  );
-  res.setHeader(
-    "X-RateLimit-Reset",
-    Math.ceil(requestData.resetTime / 1000).toString()
-  );
-
-  next();
-};
-
-// Combined security middleware
-export const applyApiSecurity = (
-  req: NextApiRequest,
+/**
+ * Middleware to authenticate user from JWT token
+ */
+export const authenticateUser = (
+  req: AuthenticatedRequest,
   res: NextApiResponse,
   next: () => void
 ) => {
-  // Apply CORS first
-  corsMiddleware(req, res, () => {
-    // Skip other middleware for OPTIONS requests
-    if (req.method === "OPTIONS") {
-      return;
+  try {
+    // Get token from Authorization header
+    const authHeader = req.headers.authorization;
+    console.log("Auth header:", authHeader);
+
+    if (!authHeader) {
+      console.log("No Authorization header found");
+      return res.status(401).json({ error: "Authorization header missing" });
     }
 
-    // Then rate limiting
-    rateLimitMiddleware(req, res, () => {
-      // Finally API key validation
-      validateApiKey(req, res, next);
-    });
-  });
+    if (!authHeader.startsWith("Bearer ")) {
+      console.log("Invalid Authorization header format");
+      return res.status(401).json({ error: "Invalid authorization format" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    if (!token) {
+      console.log("Token is empty");
+      return res.status(401).json({ error: "Invalid token format" });
+    }
+
+    try {
+      // Verify token
+      //@ts-ignore
+      const decoded = jwt.verify(token, JWT_SECRET) as DecodedToken;
+      console.log("Token decoded successfully:", decoded);
+
+      // Add user info to request object
+      req.user = {
+        id: decoded.userId,
+        email: decoded.email,
+        is_admin: decoded.isAdmin,
+      };
+
+      console.log("User attached to request:", req.user);
+
+      // Continue to the next middleware or handler
+      next();
+    } catch (jwtError) {
+      console.error("JWT verification error:", jwtError);
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+  } catch (error) {
+    console.error("Authentication middleware error:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
 };
 
-// Helper function to apply middleware to API routes
-type ApiHandler = (
-  req: NextApiRequest,
-  res: NextApiResponse
-) => Promise<void> | void;
+/**
+ * Middleware to check if authenticated user is an admin
+ */
+export const requireAdmin = (
+  req: AuthenticatedRequest,
+  res: NextApiResponse,
+  next: () => void
+) => {
+  try {
+    // First authenticate the user
+    authenticateUser(req, res, () => {
+      // Check if user is admin
+      if (!req.user?.is_admin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
 
-export function applyMiddleware(handler: ApiHandler): ApiHandler {
-  return (req: NextApiRequest, res: NextApiResponse) => {
+      // Continue to the next middleware or handler
+      next();
+    });
+  } catch (error) {
+    console.error("Admin authorization error:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+// Add this to your auth-middleware.ts file
+export function authMiddleware(
+  handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void
+) {
+  return (req: AuthenticatedRequest, res: NextApiResponse) => {
     // Create a "next" function that calls the handler
     const next = () => handler(req, res);
 
-    // Apply the security middleware
-    applyApiSecurity(req, res, next);
+    // Apply the authentication middleware
+    authenticateUser(req, res, next);
   };
 }
