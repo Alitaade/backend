@@ -8,14 +8,9 @@ const allowedOrigins = [
   "https://pro-project-gilt.vercel.app",
   "https://www.pro-project-gilt.vercel.app",
   "https://admin-frontends.vercel.app",
-  // Add your production domains here
+  "http://localhost:3000",
+  "http://localhost:3001"
 ];
-
-// Add localhost for development
-if (process.env.NODE_ENV === "development") {
-  allowedOrigins.push("http://localhost:3000");
-  allowedOrigins.push("http://localhost:3001");
-}
 
 // JWT configuration
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_key";
@@ -49,11 +44,12 @@ interface AuthenticatedRequest extends NextApiRequest {
 export const setCorsHeaders = (res: NextApiResponse, origin: string) => {
   res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Origin", origin);
-  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
-    "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization"
+    "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, x-api-key"
   );
+  res.setHeader("Access-Control-Max-Age", "86400"); // 24 hours
 };
 
 /**
@@ -66,6 +62,7 @@ export const handleCors = (req: NextApiRequest, res: NextApiResponse) => {
   if (isAllowedOrigin) {
     setCorsHeaders(res, origin);
   } else {
+    // For security, we set a default allowed origin if the request origin is not allowed
     setCorsHeaders(res, allowedOrigins[0]);
   }
 
@@ -88,6 +85,7 @@ export const applyCors = (req: NextApiRequest, res: NextApiResponse) => {
   if (isAllowedOrigin) {
     setCorsHeaders(res, origin);
   } else {
+    // For security, we set a default allowed origin if the request origin is not allowed
     setCorsHeaders(res, allowedOrigins[0]);
   }
 };

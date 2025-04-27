@@ -7,14 +7,9 @@ const allowedOrigins = [
   "https://pro-project-gilt.vercel.app",
   "https://www.pro-project-gilt.vercel.app",
   "https://admin-frontends.vercel.app",
-  // Add your production domains here
+  "http://localhost:3000",
+  "http://localhost:3001"
 ]
-
-// Add localhost for development
-if (process.env.NODE_ENV === "development") {
-  allowedOrigins.push("http://localhost:3000")
-  allowedOrigins.push("http://localhost:3001")
-}
 
 // API key validation
 export const validateApiKey = (req: NextApiRequest, res: NextApiResponse, next: () => void) => {
@@ -39,26 +34,24 @@ export const corsMiddleware = (req: NextApiRequest, res: NextApiResponse, next: 
   const origin = req.headers.origin || ""
 
   // Check if the origin is in our list of allowed origins
-  const isAllowedOrigin =
-    allowedOrigins.includes(origin as string) ||
-    process.env.NODE_ENV === "development"
+  const isAllowedOrigin = allowedOrigins.includes(origin) || process.env.NODE_ENV === "development"
 
   // Set CORS headers based on origin validation
   if (isAllowedOrigin) {
     res.setHeader("Access-Control-Allow-Origin", origin)
+    res.setHeader("Access-Control-Allow-Credentials", "true")
   } else {
     // For security, we set a default allowed origin if the request origin is not allowed
     res.setHeader("Access-Control-Allow-Origin", allowedOrigins[0])
   }
 
   // Set other CORS headers
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-  // Update the Access-Control-Allow-Headers list
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
   res.setHeader(
     "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-API-Key, x-api-key, authorization"
+    "Content-Type, Authorization, X-API-Key, x-api-key, authorization, X-CSRF-Token, X-Requested-With"
   )
-  res.setHeader("Access-Control-Allow-Credentials", "true")
+  res.setHeader("Access-Control-Max-Age", "86400") // 24 hours
 
   // Handle preflight requests - IMPORTANT: Return immediately for OPTIONS
   if (req.method === "OPTIONS") {
