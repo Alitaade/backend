@@ -93,7 +93,10 @@ export const requireAdmin = (req: AuthenticatedRequest, res: NextApiResponse, ne
     return res.status(500).json({ error: "Internal server error" })
   }
 }
-// Add this to your auth-middleware.ts file
+
+/**
+ * Helper function to create a handler that applies authentication middleware
+ */
 export function authMiddleware(handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void) {
   return (req: AuthenticatedRequest, res: NextApiResponse) => {
     // Create a "next" function that calls the handler
@@ -102,4 +105,46 @@ export function authMiddleware(handler: (req: NextApiRequest, res: NextApiRespon
     // Apply the authentication middleware
     authenticateUser(req, res, next)
   }
+}
+
+/**
+ * Helper function to create a handler that applies admin authentication middleware
+ */
+export function adminMiddleware(handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void) {
+  return (req: AuthenticatedRequest, res: NextApiResponse) => {
+    // Create a "next" function that calls the handler
+    const next = () => handler(req, res)
+
+    // Apply the admin authentication middleware
+    requireAdmin(req, res, next)
+  }
+}
+
+/**
+ * Helper function to set CORS headers consistently
+ */
+export const setCorsHeaders = (res: NextApiResponse) => {
+  // Allow requests from both user and admin frontends
+  const allowedOrigins = process.env.ALLOWED_ORIGINS || "https://admin-frontends.vercel.app,https://onlu.vercel.app"
+
+  const origin = Array.isArray(allowedOrigins) ? allowedOrigins.join(",") : allowedOrigins
+
+  res.setHeader("Access-Control-Allow-Origin", origin)
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+  res.setHeader("Access-Control-Allow-Credentials", "true")
+}
+
+/**
+ * Helper function to handle CORS preflight requests
+ */
+export const handleCors = (req: NextApiRequest, res: NextApiResponse): boolean => {
+  setCorsHeaders(res)
+
+  if (req.method === "OPTIONS") {
+    res.status(200).end()
+    return true
+  }
+
+  return false
 }

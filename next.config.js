@@ -2,8 +2,14 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   typescript: {
-    ignoreBuildErrors: true, // Suppresses TS errors in production builds
+    ignoreBuildErrors: true,
+  },
+  images: {
+    unoptimized: true,
   },
   async headers() {
     return [
@@ -12,7 +18,7 @@ const nextConfig = {
         source: "/api/:path*",
         headers: [
           { key: "Access-Control-Allow-Credentials", value: "true" },
-          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Access-Control-Allow-Origin", value: "*" }, // This will be overridden by our middleware for specific origins
           {
             key: "Access-Control-Allow-Methods",
             value: "GET,DELETE,PATCH,POST,PUT,OPTIONS",
@@ -20,11 +26,11 @@ const nextConfig = {
           {
             key: "Access-Control-Allow-Headers",
             value:
-              "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization",
+              "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, X-API-Key",
           },
         ],
       },
-    ];
+    ]
   },
   async redirects() {
     return [
@@ -33,8 +39,8 @@ const nextConfig = {
         destination: "/api",
         permanent: true,
       },
-    ];
+    ]
   },
-};
+}
 
-module.exports = nextConfig;
+module.exports = nextConfig

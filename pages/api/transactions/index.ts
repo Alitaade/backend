@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { query } from "../../../database/connection"
-import { createOrder } from "../../../controllers/order-controller"
-import { authenticateUser, requireAdmin, handleCors, setCorsHeaders } from "../../../middleware/auth-middleware"
+import { requireAdmin, handleCors, setCorsHeaders } from "../../../middleware/auth-middleware"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Handle CORS preflight request
@@ -10,33 +9,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     switch (req.method) {
       case "GET":
-        // Admin only - get all orders
+        // Admin only - get all transactions
         return new Promise<void>((resolve, reject) => {
           requireAdmin(req, res, async () => {
             try {
-              await getOrdersHandler(req, res)
+              await getTransactionsHandler(req, res)
               resolve()
             } catch (error) {
-              console.error("Error in getOrders:", error)
+              console.error("Error in getTransactions:", error)
               if (!res.writableEnded) {
-                res.status(500).json({ error: "Server error processing orders request" })
-              }
-              reject(error)
-            }
-          })
-        })
-
-      case "POST":
-        // Authenticated user - create a new order
-        return new Promise<void>((resolve, reject) => {
-          authenticateUser(req, res, async () => {
-            try {
-              await createOrder(req, res)
-              resolve()
-            } catch (error) {
-              console.error("Error in createOrder:", error)
-              if (!res.writableEnded) {
-                res.status(500).json({ error: "Server error processing order creation" })
+                res.status(500).json({ error: "Server error processing transactions request" })
               }
               reject(error)
             }
@@ -45,11 +27,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       default:
         setCorsHeaders(res)
-        res.setHeader("Allow", ["GET", "POST", "OPTIONS"])
+        res.setHeader("Allow", ["GET", "OPTIONS"])
         return res.status(405).json({ error: "Method not allowed" })
     }
   } catch (error) {
-    console.error("Unhandled error in orders API handler:", error)
+    console.error("Unhandled error in transactions API handler:", error)
     if (!res.writableEnded) {
       setCorsHeaders(res)
       return res.status(500).json({ error: "Internal server error" })
@@ -57,17 +39,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 }
 
-async function getOrdersHandler(req: NextApiRequest, res: NextApiResponse) {
+async function getTransactionsHandler(req: NextApiRequest, res: NextApiResponse) {
   try {
     // Extract query parameters
-    const { search, status, payment_status, start_date, end_date, page = 1, limit = 10 } = req.query
+    const { search, status, payment_method, start_date, end_date, page = 1, limit = 10 } = req.query
 
     // Build the SQL query
     let sqlQuery = `
-      SELECT o.*, 
+      SELECT t.*, 
              u.first_name, u.last_name, u.email
-      FROM orders o
-      LEFT JOIN users u ON o.user_id = u.id
+      FROM transactions t
+      LEFT JOIN users u ON t.user_id = u.id
       WHERE 1=1
     `
     const queryParams: any[] = []
@@ -76,7 +58,8 @@ async function getOrdersHandler(req: NextApiRequest, res: NextApiResponse) {
     // Add search filter
     if (search) {
       sqlQuery += ` AND (
-        o.order_number ILIKE $${paramIndex} OR
+        t.reference ILIKE $${paramIndex} OR
+        CAST(t.order_id AS TEXT) ILIKE $${paramIndex} OR
         u.email ILIKE $${paramIndex} OR
         u.first_name ILIKE $${paramIndex} OR
         u.last_name ILIKE $${paramIndex} OR
@@ -88,27 +71,27 @@ async function getOrdersHandler(req: NextApiRequest, res: NextApiResponse) {
 
     // Add status filter
     if (status) {
-      sqlQuery += ` AND o.status = $${paramIndex}`
+      sqlQuery += ` AND t.status = $${paramIndex}`
       queryParams.push(status)
       paramIndex++
     }
 
-    // Add payment status filter
-    if (payment_status) {
-      sqlQuery += ` AND o.payment_status = $${paramIndex}`
-      queryParams.push(payment_status)
+    // Add payment method filter
+    if (payment_method) {
+      sqlQuery += ` AND t.payment_method = $${paramIndex}`
+      queryParams.push(payment_method)
       paramIndex++
     }
 
     // Add date range filters
     if (start_date) {
-      sqlQuery += ` AND o.created_at >= $${paramIndex}`
+      sqlQuery += ` AND t.created_at >= $${paramIndex}`
       queryParams.push(new Date(start_date as string))
       paramIndex++
     }
 
     if (end_date) {
-      sqlQuery += ` AND o.created_at <= $${paramIndex}`
+      sqlQuery += ` AND t.created_at <= $${paramIndex}`
       queryParams.push(new Date(end_date as string))
       paramIndex++
     }
@@ -116,27 +99,27 @@ async function getOrdersHandler(req: NextApiRequest, res: NextApiResponse) {
     // Count total records for pagination
     const countQuery = `
       SELECT COUNT(*) as total
-      FROM (${sqlQuery}) as filtered_orders
+      FROM (${sqlQuery}) as filtered_transactions
     `
     const countResult = await query(countQuery, queryParams)
     const total = Number.parseInt(countResult.rows[0].total)
 
     // Add pagination
     const offset = (Number(page) - 1) * Number(limit)
-    sqlQuery += ` ORDER BY o.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`
+    sqlQuery += ` ORDER BY t.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`
     queryParams.push(Number(limit), offset)
 
     // Execute the query
     const result = await query(sqlQuery, queryParams)
 
     // Format the response data
-    const formattedOrders = result.rows.map((order) => {
+    const formattedTransactions = result.rows.map((transaction) => {
       return {
-        ...order,
+        ...transaction,
         user: {
-          first_name: order.first_name,
-          last_name: order.last_name,
-          email: order.email,
+          first_name: transaction.first_name,
+          last_name: transaction.last_name,
+          email: transaction.email,
         },
       }
     })
@@ -149,14 +132,14 @@ async function getOrdersHandler(req: NextApiRequest, res: NextApiResponse) {
 
     // Return paginated response
     return res.status(200).json({
-      data: formattedOrders,
+      data: formattedTransactions,
       total,
       page: Number(page),
       limit: Number(limit),
       totalPages,
     })
   } catch (error) {
-    console.error("Error fetching orders:", error)
+    console.error("Error fetching transactions:", error)
     setCorsHeaders(res)
     return res.status(500).json({ error: "Internal server error" })
   }
