@@ -1,10 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { query } from "../../../database/connection"
-import { requireAdmin, handleCors, setCorsHeaders } from "../../../middleware/auth-middleware"
+import { requireAdmin } from "../../../middleware/auth-middleware"
+import { applyCors } from "../../../middleware/api-security"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Handle CORS preflight request
-  if (handleCors(req, res)) return
+  // Always apply CORS headers first
+  applyCors(req, res)
+  
+  // Handle OPTIONS request properly
+  if (req.method === "OPTIONS") {
+    return res.status(200).end()
+  }
 
   try {
     switch (req.method) {
@@ -26,14 +32,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
 
       default:
-        setCorsHeaders(res)
         res.setHeader("Allow", ["GET", "OPTIONS"])
         return res.status(405).json({ error: "Method not allowed" })
     }
   } catch (error) {
     console.error("Unhandled error in transactions API handler:", error)
     if (!res.writableEnded) {
-      setCorsHeaders(res)
       return res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -127,9 +131,6 @@ async function getTransactionsHandler(req: NextApiRequest, res: NextApiResponse)
     // Calculate pagination metadata
     const totalPages = Math.ceil(total / Number(limit))
 
-    // Set CORS headers
-    setCorsHeaders(res)
-
     // Return paginated response
     return res.status(200).json({
       data: formattedTransactions,
@@ -140,7 +141,6 @@ async function getTransactionsHandler(req: NextApiRequest, res: NextApiResponse)
     })
   } catch (error) {
     console.error("Error fetching transactions:", error)
-    setCorsHeaders(res)
     return res.status(500).json({ error: "Internal server error" })
   }
 }

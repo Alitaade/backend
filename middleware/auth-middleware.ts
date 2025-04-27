@@ -31,8 +31,6 @@ interface AuthenticatedRequest extends NextApiRequest {
  */
 export const authenticateUser = (req: AuthenticatedRequest, res: NextApiResponse, next: () => void) => {
   try {
-    // Apply CORS headers first
-    applyCors(req, res)
     
     // Handle OPTIONS requests before authentication
     if (req.method === "OPTIONS") {
@@ -88,8 +86,7 @@ export const authenticateUser = (req: AuthenticatedRequest, res: NextApiResponse
  */
 export const requireAdmin = (req: AuthenticatedRequest, res: NextApiResponse, next: () => void) => {
   try {
-    // Always apply CORS headers first
-    applyCors(req, res)
+
     
     // Handle OPTIONS requests before admin check
     if (req.method === "OPTIONS") {
@@ -118,8 +115,7 @@ export const requireAdmin = (req: AuthenticatedRequest, res: NextApiResponse, ne
  */
 export function authMiddleware(handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void) {
   return (req: AuthenticatedRequest, res: NextApiResponse) => {
-    // Apply CORS headers
-    applyCors(req, res)
+
 
     // Handle OPTIONS requests
     if (req.method === "OPTIONS") {
@@ -140,8 +136,7 @@ export function authMiddleware(handler: (req: NextApiRequest, res: NextApiRespon
  */
 export function adminMiddleware(handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void) {
   return (req: AuthenticatedRequest, res: NextApiResponse) => {
-    // Apply CORS headers
-    applyCors(req, res)
+   
 
     // Handle OPTIONS requests
     if (req.method === "OPTIONS") {
