@@ -6,6 +6,7 @@ const allowedOrigins = [
   "https://www.onlu.vercel.app",
   "https://pro-project-gilt.vercel.app",
   "https://www.pro-project-gilt.vercel.app",
+  "https://admin-frontends.vercel.app",
   // Add your production domains here
 ];
 

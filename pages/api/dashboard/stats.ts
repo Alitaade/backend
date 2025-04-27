@@ -84,11 +84,10 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
     const newCustomersResult = await query(newCustomersQuery, [formattedStartDate, formattedEndDate])
     const totalUsers = Number.parseInt(newCustomersResult.rows[0].total_users)
 
-    // Get total products count
+    // Get total products count - FIXED to match schema (removed is_active filter)
     const totalProductsQuery = `
       SELECT COUNT(*) as total_products
       FROM products
-      WHERE is_active = true
     `
     const totalProductsResult = await query(totalProductsQuery)
     const totalProducts = Number.parseInt(totalProductsResult.rows[0].total_products)
@@ -134,9 +133,11 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
       }
     }
 
-    // Get recent orders
+    // Get recent orders - FIXED to match schema fields
     const recentOrdersQuery = `
-      SELECT o.*, 
+      SELECT o.id, o.order_number, o.user_id, o.total_amount, o.status, 
+             o.payment_method, o.payment_status, o.shipping_address,
+             o.created_at, o.updated_at,
              u.first_name, u.last_name, u.email
       FROM orders o
       LEFT JOIN users u ON o.user_id = u.id
@@ -145,7 +146,7 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
     `
     const recentOrdersResult = await query(recentOrdersQuery)
 
-    // Format recent orders
+    // Format recent orders to match schema fields
     const recentOrders = recentOrdersResult.rows.map((order) => ({
       id: order.id,
       user_id: order.user_id,
@@ -154,12 +155,6 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
       payment_status: order.payment_status,
       payment_method: order.payment_method,
       shipping_address: order.shipping_address,
-      shipping_city: order.shipping_city,
-      shipping_state: order.shipping_state,
-      shipping_country: order.shipping_country,
-      shipping_phone: order.shipping_phone,
-      subtotal: Number.parseFloat(order.subtotal || '0'),
-      shipping_fee: Number.parseFloat(order.shipping_fee || '0'),
       total: Number.parseFloat(order.total_amount || '0'),
       created_at: order.created_at,
       updated_at: order.updated_at,
@@ -170,17 +165,12 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
       }
     }))
 
-    // If no recent orders found, provide an empty array
-    if (recentOrders.length === 0) {
-      recentOrders = []
-    }
-
-    // Get top products - fixed to match schema
+    // Get top products - FIXED to match schema (changed base_price to price)
     const topProductsQuery = `
       SELECT 
         p.id,
         p.name,
-        p.base_price as price,
+        p.price,
         COUNT(DISTINCT o.id) as order_count,
         SUM(oi.quantity) as total_quantity
       FROM order_items oi
@@ -188,25 +178,20 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
       JOIN orders o ON oi.order_id = o.id
       WHERE o.created_at BETWEEN $1 AND $2
       AND o.payment_status = 'paid'
-      GROUP BY p.id, p.name, p.base_price
+      GROUP BY p.id, p.name, p.price
       ORDER BY total_quantity DESC
       LIMIT 5
     `
     const topProductsResult = await query(topProductsQuery, [formattedStartDate, formattedEndDate])
 
     // Format top products to match frontend expectations
-    let topProducts = topProductsResult.rows.map((row) => ({
+    const topProducts = topProductsResult.rows.map((row) => ({
       id: row.id,
       name: row.name,
       price: Number.parseFloat(row.price),
       order_count: row.order_count.toString(),
       total_quantity: row.total_quantity.toString(),
     }))
-
-    // If no top products found, return an empty array
-    if (topProducts.length === 0) {
-      topProducts = []
-    }
 
     // Return dashboard stats with structure matching the frontend interface
     return res.status(200).json({
