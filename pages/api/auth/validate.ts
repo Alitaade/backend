@@ -5,7 +5,7 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // Handle CORS preflight request (OPTIONSonly for tt)
+  // Handle CORS preflight request (OPTIONS)
   if (req.method === "OPTIONS") {
     res.setHeader("Access-Control-Allow-Origin", "*"); // Or your specific origin
     res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");

@@ -2,32 +2,29 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: true, // Suppresses TS errors in production builds
   },
-  images: {
-    domains: ["res.cloudinary.com", "images.unsplash.com", "via.placeholder.com"],
-    unoptimized: true,
-  },
-  // Remove any CORS configuration from here to avoid conflicts with our middleware
   async headers() {
     return [
       {
-        // Apply basic security headers to all routes
+        // Apply CORS headers to all routes
         source: "/api/:path*",
         headers: [
-          { key: "X-DNS-Prefetch-Control", value: "on" },
-          { key: "X-XSS-Protection", value: "1; mode=block" },
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "origin-when-cross-origin" },
-          // Remove the CORS headers from here - they'll be handled by middleware
+          { key: "Access-Control-Allow-Credentials", value: "true" },
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          {
+            key: "Access-Control-Allow-Methods",
+            value: "GET,DELETE,PATCH,POST,PUT,OPTIONS",
+          },
+          {
+            key: "Access-Control-Allow-Headers",
+            value:
+              "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization",
+          },
         ],
       },
-    ]
+    ];
   },
   async redirects() {
     return [
@@ -36,8 +33,8 @@ const nextConfig = {
         destination: "/api",
         permanent: true,
       },
-    ]
+    ];
   },
-}
+};
 
-module.exports = nextConfig
+module.exports = nextConfig;
