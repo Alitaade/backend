@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { query } from "../../../database/connection"
 import { requireAdmin } from "../../../middleware/auth-middleware"
-import { subDays, subMonths, format, startOfDay, endOfDay } from "date-fns"
+import { subDays, subMonths, format, startOfDay, endOfDay, eachDayOfInterval, eachMonthOfInterval } from "date-fns"
 
 interface SalesByPeriodRow {
   date: string
@@ -131,10 +131,29 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
     const salesByPeriodResult = await query(salesByPeriodQuery, [formattedStartDate, formattedEndDate])
 
     // Format sales by period
-    const salesByPeriod = salesByPeriodResult.rows.map((row: SalesByPeriodRow) => ({
+    let salesByPeriod = salesByPeriodResult.rows.map((row: SalesByPeriodRow) => ({
       date: format(new Date(row.date), range === "12months" ? "MMM yyyy" : "MMM dd"),
       sales: Number.parseFloat(row.sales),
     }))
+
+    // Generate placeholder data if no sales data is found
+    if (salesByPeriodResult.rows.length === 0) {
+      if (range === "12months") {
+        // For monthly data
+        const months = eachMonthOfInterval({ start: startDate, end: endDate })
+        salesByPeriod = months.map(date => ({
+          date: format(date, "MMM yyyy"),
+          sales: 0
+        }))
+      } else {
+        // For daily data
+        const days = eachDayOfInterval({ start: startDate, end: endDate })
+        salesByPeriod = days.map(date => ({
+          date: format(date, "MMM dd"),
+          sales: 0
+        }))
+      }
+    }
 
     // Get recent orders
     const recentOrdersQuery = `
@@ -156,8 +175,8 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
       payment_status: order.payment_status,
       created_at: order.created_at,
       customer: {
-        name: `${order.first_name} ${order.last_name}`,
-        email: order.email,
+        name: `${order.first_name || ''} ${order.last_name || ''}`.trim() || 'Guest User',
+        email: order.email || 'No email provided',
       },
     }))
 
@@ -173,17 +192,27 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
     const orderStatusResult = await query(orderStatusQuery, [formattedStartDate, formattedEndDate])
 
     // Format order status counts
-    const orderStatuses = orderStatusResult.rows.map((row: OrderStatusRow) => ({
+    let orderStatuses = orderStatusResult.rows.map((row: OrderStatusRow) => ({
       status: row.status,
       count: Number.parseInt(row.count),
     }))
 
-    // Get top products
+    // If no order statuses found, provide default statuses with zero count
+    if (orderStatuses.length === 0) {
+      orderStatuses = [
+        { status: 'processing', count: 0 },
+        { status: 'shipped', count: 0 },
+        { status: 'delivered', count: 0 },
+        { status: 'cancelled', count: 0 }
+      ]
+    }
+
+    // Get top products - fixed to match schema
     const topProductsQuery = `
       SELECT 
         p.id,
         p.name,
-        COUNT(oi.id) as order_count,
+        COUNT(DISTINCT o.id) as order_count,
         SUM(oi.quantity) as units_sold,
         SUM(oi.price * oi.quantity) as revenue
       FROM order_items oi
@@ -198,13 +227,18 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
     const topProductsResult = await query(topProductsQuery, [formattedStartDate, formattedEndDate])
 
     // Format top products
-    const topProducts = topProductsResult.rows.map((row: TopProductRow) => ({
+    let topProducts = topProductsResult.rows.map((row: TopProductRow) => ({
       id: row.id,
       name: row.name,
       order_count: Number.parseInt(row.order_count),
       units_sold: Number.parseInt(row.units_sold),
       revenue: Number.parseFloat(row.revenue),
     }))
+
+    // If no top products found, return an empty array (frontend should handle this)
+    if (topProducts.length === 0) {
+      topProducts = []
+    }
 
     // Return dashboard stats
     return res.status(200).json({

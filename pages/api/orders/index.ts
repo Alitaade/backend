@@ -1,11 +1,18 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { query } from "../../../database/connection"
 import { createOrder } from "../../../controllers/order-controller"
-import { authenticateUser, requireAdmin, handleCors, setCorsHeaders } from "../../../middleware/auth-middleware"
+import { authenticateUser, requireAdmin  } from "../../../middleware/auth-middleware"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Set CORS headers for all responses
+  res.setHeader("Access-Control-Allow-Origin", "*"); // In production, use specific origins instead of *
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  
   // Handle CORS preflight request
-  if (handleCors(req, res)) return
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
 
   try {
     switch (req.method) {
@@ -44,14 +51,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
 
       default:
-        setCorsHeaders(res)
+        
         res.setHeader("Allow", ["GET", "POST", "OPTIONS"])
         return res.status(405).json({ error: "Method not allowed" })
     }
   } catch (error) {
     console.error("Unhandled error in orders API handler:", error)
     if (!res.writableEnded) {
-      setCorsHeaders(res)
+      
       return res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -144,8 +151,7 @@ async function getOrdersHandler(req: NextApiRequest, res: NextApiResponse) {
     // Calculate pagination metadata
     const totalPages = Math.ceil(total / Number(limit))
 
-    // Set CORS headers
-    setCorsHeaders(res)
+   
 
     // Return paginated response
     return res.status(200).json({
@@ -157,7 +163,7 @@ async function getOrdersHandler(req: NextApiRequest, res: NextApiResponse) {
     })
   } catch (error) {
     console.error("Error fetching orders:", error)
-    setCorsHeaders(res)
+    
     return res.status(500).json({ error: "Internal server error" })
   }
 }

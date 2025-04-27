@@ -4,7 +4,15 @@ import { createNewProduct, getProducts } from "../../../controllers/product-cont
 import { requireAdmin } from "../../../middleware/auth-middleware"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-
+ // Set CORS headers for all responses
+ res.setHeader("Access-Control-Allow-Origin", "*"); // In production, use specific origins instead of *
+ res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+ res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+ 
+ // Handle CORS preflight request
+ if (req.method === "OPTIONS") {
+   return res.status(200).end();
+ }
 
   try {
      // Normalize query parameters - map 'category' to 'category_id' if it exists

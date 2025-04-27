@@ -1,55 +1,13 @@
-import type { NextApiRequest, NextApiResponse } from "next"
-import { query } from "../../../database/connection"
-import { createNewCategory, getCategories } from "../../../controllers/category-controller"
-import { requireAdmin } from "../../../middleware/auth-middleware"
+import type { NextApiRequest, NextApiResponse } from "next";
+import { query } from "../../../database/connection";
+import { createNewCategory, getCategories } from "../../../controllers/category-controller";
+import { requireAdmin } from "../../../middleware/auth-middleware";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-
-
-  try {
-    switch (req.method) {
-      case "GET":
-        // Public endpoint - get all categories
-        return await getCategories(req, res)
-
-      case "POST":
-        // Admin only - create a new category
-        return new Promise<void>((resolve) => {
-          requireAdmin(req, res, async () => {
-            try {
-              await createNewCategory(req, res)
-            } catch (error) {
-              console.error("Error creating category:", error)
-              if (!res.headersSent) {
-                res.status(500).json({ error: "Failed to create category" })
-              }
-            } finally {
-              resolve()
-            }
-          })
-        })
-
-      default:
-        
-        res.setHeader("Allow", ["GET", "POST", "OPTIONS"])
-        return res.status(405).json({
-          error: `Method ${req.method} not allowed`,
-          allowedMethods: ["GET", "POST"],
-        })
-    }
-  } catch (error) {
-    console.error("Unhandled error in categories handler:", error)
-    if (!res.writableEnded) {
-      
-      return res.status(500).json({ error: "Internal server error" })
-    }
-  }
-}
-
-async function getCategoriesHandler(req: NextApiRequest, res: NextApiResponse) {
+// Export the getCategories function to be used in other files
+export async function getCategoriesHandler(req: NextApiRequest, res: NextApiResponse) {
   try {
     // Extract query parameters
-    const { search, page = 1, limit = 50 } = req.query
+    const { search, page = 1, limit = 50 } = req.query;
 
     // Build the SQL query
     let sqlQuery = `
@@ -57,43 +15,41 @@ async function getCategoriesHandler(req: NextApiRequest, res: NextApiResponse) {
       FROM categories c
       LEFT JOIN products p ON c.id = p.category_id
       WHERE 1=1
-    `
-    const queryParams: any[] = []
-    let paramIndex = 1
+    `;
+    const queryParams: any[] = [];
+    let paramIndex = 1;
 
     // Add search filter
     if (search) {
       sqlQuery += ` AND (
         c.name ILIKE $${paramIndex} OR
         c.description ILIKE $${paramIndex}
-      )`
-      queryParams.push(`%${search}%`)
-      paramIndex++
+      )`;
+      queryParams.push(`%${search}%`);
+      paramIndex++;
     }
 
     // Group by category
-    sqlQuery += ` GROUP BY c.id`
+    sqlQuery += ` GROUP BY c.id`;
 
     // Count total records for pagination
     const countQuery = `
       SELECT COUNT(*) as total FROM categories
       ${search ? `WHERE name ILIKE $1 OR description ILIKE $1` : ""}
-    `
-    const countResult = await query(countQuery, search ? [`%${search}%`] : [])
-    const total = Number.parseInt(countResult.rows[0].total)
+    `;
+    const countResult = await query(countQuery, search ? [`%${search}%`] : []);
+    const total = Number.parseInt(countResult.rows[0].total);
 
     // Add pagination
-    const offset = (Number(page) - 1) * Number(limit)
-    sqlQuery += ` ORDER BY c.name ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`
-    queryParams.push(Number(limit), offset)
+    const offset = (Number(page) - 1) * Number(limit);
+    sqlQuery += ` ORDER BY c.name ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    queryParams.push(Number(limit), offset);
 
     // Execute the query
-    const result = await query(sqlQuery, queryParams)
+    const result = await query(sqlQuery, queryParams);
 
     // Calculate pagination metadata
-    const totalPages = Math.ceil(total / Number(limit))
-
-    
+    const totalPages = Math.ceil(total / Number(limit));
 
     // Return paginated response
     return res.status(200).json({
@@ -102,10 +58,61 @@ async function getCategoriesHandler(req: NextApiRequest, res: NextApiResponse) {
       page: Number(page),
       limit: Number(limit),
       totalPages,
-    })
+    });
   } catch (error) {
-    console.error("Error fetching categories:", error)
-    
-    return res.status(500).json({ error: "Internal server error" })
+    console.error("Error fetching categories:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  // Set CORS headers for all responses
+  res.setHeader("Access-Control-Allow-Origin", "*"); // In production, use specific origins instead of *
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  
+  // Handle CORS preflight request
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
+  try {
+    switch (req.method) {
+      case "GET":
+        // Public endpoint - get all categories
+        return await getCategories(req, res);
+
+      case "POST":
+        // Admin only - create a new category
+        return new Promise((resolve) => {
+          requireAdmin(req, res, async () => {
+            try {
+              await createNewCategory(req, res);
+            } catch (error) {
+              console.error("Error creating category:", error);
+              if (!res.headersSent) {
+                res.status(500).json({ error: "Failed to create category" });
+              }
+            } finally {
+              resolve();
+            }
+          });
+        });
+
+      default:
+        res.setHeader("Allow", ["GET", "POST", "OPTIONS"]);
+        return res.status(405).json({
+          error: `Method ${req.method} not allowed`,
+          allowedMethods: ["GET", "POST", "OPTIONS"],
+        });
+    }
+  } catch (error) {
+    console.error("Unhandled error in categories handler:", error);
+    if (!res.writableEnded) {
+      return res.status(500).json({ error: "Internal server error" });
+    }
   }
 }
