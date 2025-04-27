@@ -1,11 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { query } from "../../../database/connection"
 import { requireAdmin } from "../../../middleware/auth-middleware"
-import { applyCors } from "../../../middleware/api-security"
+
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Always apply CORS headers first
-  applyCors(req, res)
+
   
   // Handle OPTIONS request properly
   if (req.method === "OPTIONS") {

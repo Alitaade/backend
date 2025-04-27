@@ -1,52 +1,19 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 
-// CORS configuration
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",")
-  : ["https://admin-frontends.vercel.app", "https://onlu.vercel.app", "https://pro-project-gilt.vercel.app"]
+// List of allowed origins for CORS
+const allowedOrigins = [
+  "https://onlu.vercel.app",
+  "https://www.onlu.vercel.app",
+  "https://pro-project-gilt.vercel.app",
+  "https://www.pro-project-gilt.vercel.app",
+  "https://admin-frontends.vercel.app",
+  // Add your production domains here
+]
 
-/**
- * Apply CORS headers to the response
- */
-export const applyCors = (req: NextApiRequest, res: NextApiResponse) => {
-  // Get the origin from the request
-  const origin = req.headers.origin || ALLOWED_ORIGINS
-
-  // Check if the origin is allowed
-  if (ALLOWED_ORIGINS.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin)
-  } else if (process.env.NODE_ENV === "development") {
-    // In development, allow any origin
-    res.setHeader("Access-Control-Allow-Origin", "*")
-  } else {
-    // Default to the main frontend in production
-    res.setHeader("Access-Control-Allow-Origin", "https://onlu.vercel.app")
-  }
-
-  // Set other CORS headers
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-API-Key, X-CSRF-Token, X-Requested-With",
-  )
-  res.setHeader("Access-Control-Allow-Credentials", "true")
-  res.setHeader("Access-Control-Max-Age", "86400") // 24 hours
-}
-
-/**
- * Handle CORS preflight requests
- */
-export const handleCorsPreflightRequest = (req: NextApiRequest, res: NextApiResponse): boolean => {
-  // Apply CORS headers
-  applyCors(req, res)
-
-  // Handle OPTIONS requests
-  if (req.method === "OPTIONS") {
-    res.status(200).end()
-    return true
-  }
-
-  return false
+// Add localhost for development
+if (process.env.NODE_ENV === "development") {
+  allowedOrigins.push("http://localhost:3000")
+  allowedOrigins.push("http://localhost:3001")
 }
 
 // API key validation
@@ -66,12 +33,48 @@ export const validateApiKey = (req: NextApiRequest, res: NextApiResponse, next: 
   next()
 }
 
+// CORS middleware
+export const corsMiddleware = (req: NextApiRequest, res: NextApiResponse, next: () => void) => {
+  // Get the origin from the request headers
+  const origin = req.headers.origin || ""
+
+  // Check if the origin is in our list of allowed origins
+  const isAllowedOrigin =
+    allowedOrigins.includes(origin as string) ||
+    process.env.NODE_ENV === "development"
+
+  // Set CORS headers based on origin validation
+  if (isAllowedOrigin) {
+    res.setHeader("Access-Control-Allow-Origin", origin)
+  } else {
+    // For security, we set a default allowed origin if the request origin is not allowed
+    res.setHeader("Access-Control-Allow-Origin", allowedOrigins[0])
+  }
+
+  // Set other CORS headers
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+  // Update the Access-Control-Allow-Headers list
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-API-Key, x-api-key, authorization"
+  )
+  res.setHeader("Access-Control-Allow-Credentials", "true")
+
+  // Handle preflight requests - IMPORTANT: Return immediately for OPTIONS
+  if (req.method === "OPTIONS") {
+    res.status(200).end()
+    return
+  }
+
+  next()
+}
+
 // Rate limiting middleware
 const requestCounts = new Map<string, { count: number; resetTime: number }>()
 
 export const rateLimitMiddleware = (req: NextApiRequest, res: NextApiResponse, next: () => void) => {
   // Get client IP
-  const clientIp = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown"
+  const clientIp = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown"
 
   const key = `${clientIp}-${req.url}`
   const now = Date.now()
@@ -113,38 +116,29 @@ export const rateLimitMiddleware = (req: NextApiRequest, res: NextApiResponse, n
 // Combined security middleware
 export const applyApiSecurity = (req: NextApiRequest, res: NextApiResponse, next: () => void) => {
   // Apply CORS first
-  applyCors(req, res)
-  if (req.method === "OPTIONS") {
-    return
-  }
-
-  // Then rate limiting
-  rateLimitMiddleware(req, res, () => {
-    // Finally API key validation
-    validateApiKey(req, res, next)
-  })
-}
-
-/**
- * Apply security middleware to API routes
- */
-export const applyMiddleware = (handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void) => {
-  return async (req: NextApiRequest, res: NextApiResponse) => {
-    // Handle CORS preflight request
-    if (handleCorsPreflightRequest(req, res)) {
+  corsMiddleware(req, res, () => {
+    // Skip other middleware for OPTIONS requests
+    if (req.method === "OPTIONS") {
       return
     }
 
-    // Apply CORS headers for all requests
-    applyCors(req, res)
+    // Then rate limiting
+    rateLimitMiddleware(req, res, () => {
+      // Finally API key validation
+      validateApiKey(req, res, next)
+    })
+  })
+}
 
-    // Add security headers
-    res.setHeader("X-Content-Type-Options", "nosniff")
-    res.setHeader("X-Frame-Options", "DENY")
-    res.setHeader("X-XSS-Protection", "1; mode=block")
-    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin")
+// Helper function to apply middleware to API routes
+type ApiHandler = (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void
 
-    // Call the handler
-    return handler(req, res)
+export function applyMiddleware(handler: ApiHandler): ApiHandler {
+  return (req: NextApiRequest, res: NextApiResponse) => {
+    // Create a "next" function that calls the handler
+    const next = () => handler(req, res)
+
+    // Apply the security middleware
+    applyApiSecurity(req, res, next)
   }
 }

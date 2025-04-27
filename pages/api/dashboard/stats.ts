@@ -1,12 +1,39 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { query } from "../../../database/connection"
 import { requireAdmin } from "../../../middleware/auth-middleware"
-import { applyCors } from "../../../middleware/api-security"
 import { subDays, subMonths, format, startOfDay, endOfDay } from "date-fns"
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+interface SalesByPeriodRow {
+  date: string
+  sales: string
+}
 
-  
+interface RecentOrderRow {
+  id: number
+  order_number: string
+  total_amount: string
+  status: string
+  payment_status: string
+  created_at: string
+  first_name: string
+  last_name: string
+  email: string
+}
+
+interface OrderStatusRow {
+  status: string
+  count: string
+}
+
+interface TopProductRow {
+  id: number
+  name: string
+  order_count: string
+  units_sold: string
+  revenue: string
+}
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Handle OPTIONS request properly
   if (req.method === "OPTIONS") {
     return res.status(200).end()
@@ -60,7 +87,7 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
 
     // Get total sales
     const totalSalesQuery = `
-      SELECT COALESCE(SUM(total), 0) as total_sales
+      SELECT COALESCE(SUM(total_amount), 0) as total_sales
       FROM orders
       WHERE created_at BETWEEN $1 AND $2
       AND payment_status = 'paid'
@@ -94,7 +121,7 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
     const salesByPeriodQuery = `
       SELECT 
         ${groupBy} as date,
-        COALESCE(SUM(total), 0) as sales
+        COALESCE(SUM(total_amount), 0) as sales
       FROM orders
       WHERE created_at BETWEEN $1 AND $2
       AND payment_status = 'paid'
@@ -104,7 +131,7 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
     const salesByPeriodResult = await query(salesByPeriodQuery, [formattedStartDate, formattedEndDate])
 
     // Format sales by period
-    const salesByPeriod = salesByPeriodResult.rows.map((row) => ({
+    const salesByPeriod = salesByPeriodResult.rows.map((row: SalesByPeriodRow) => ({
       date: format(new Date(row.date), range === "12months" ? "MMM yyyy" : "MMM dd"),
       sales: Number.parseFloat(row.sales),
     }))
@@ -121,10 +148,10 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
     const recentOrdersResult = await query(recentOrdersQuery)
 
     // Format recent orders
-    const recentOrders = recentOrdersResult.rows.map((order) => ({
+    const recentOrders = recentOrdersResult.rows.map((order: RecentOrderRow) => ({
       id: order.id,
       order_number: order.order_number,
-      total: Number.parseFloat(order.total),
+      total: Number.parseFloat(order.total_amount),
       status: order.status,
       payment_status: order.payment_status,
       created_at: order.created_at,
@@ -146,7 +173,7 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
     const orderStatusResult = await query(orderStatusQuery, [formattedStartDate, formattedEndDate])
 
     // Format order status counts
-    const orderStatuses = orderStatusResult.rows.map((row) => ({
+    const orderStatuses = orderStatusResult.rows.map((row: OrderStatusRow) => ({
       status: row.status,
       count: Number.parseInt(row.count),
     }))
@@ -171,7 +198,7 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
     const topProductsResult = await query(topProductsQuery, [formattedStartDate, formattedEndDate])
 
     // Format top products
-    const topProducts = topProductsResult.rows.map((row) => ({
+    const topProducts = topProductsResult.rows.map((row: TopProductRow) => ({
       id: row.id,
       name: row.name,
       order_count: Number.parseInt(row.order_count),
@@ -179,10 +206,8 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
       revenue: Number.parseFloat(row.revenue),
     }))
 
-  
-
-     // Return dashboard stats
-     return res.status(200).json({
+    // Return dashboard stats
+    return res.status(200).json({
       data: {
         totalSales,
         totalOrders,
