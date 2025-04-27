@@ -10,7 +10,7 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
  */
 export const applyCors = (req: NextApiRequest, res: NextApiResponse) => {
   // Get the origin from the request
-  const origin = req.headers.origin || ""
+  const origin = req.headers.origin || ALLOWED_ORIGINS
 
   // Check if the origin is allowed
   if (ALLOWED_ORIGINS.includes(origin)) {
