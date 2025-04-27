@@ -1,11 +1,134 @@
+import type { NextApiRequest, NextApiResponse } from "next"; import jwt from "jsonwebtoken"; import { OAuth2Client } from "google-auth-library"; import { findUserByEmail, findUserByGoogleId, createUser, validatePassword, findUserById, } from "../models/user"; import { query } fro
+
+pasted
+
+See this code
+import type { NextApiRequest, NextApiResponse } from "next"
+import { googleAuth } from "../../../controllers/auth-controller"
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Handle CORS preflight request (OPTIONS)
+  if (req.method === "OPTIONS") {
+    res.setHeader("Access-Control-Allow-Origin", "*")
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+    return res.status(200).end()
+  }
+
+  // Only allow POST method for Google authentication
+  if (req.method !== "POST") {
+    res.setHeader("Allow", ["POST"])
+    return res.status(405).json({ error: "Method not allowed" })
+  }
+
+  // Call the googleAuth controller
+  try {
+    await googleAuth(req, res)
+  } catch (error) {
+    console.error("Unhandled error in Google auth handler:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+}
+ See the error
+Access to XMLHttpRequest at 'https://onlu.vercel.app/api/auth/google' from origin 'https://pro-project-gilt.vercel.app' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+
+Edit
+I can see the issue. Your code is configured to handle CORS preflight requests correctly, but you're still getting a CORS error when trying to access the Google authentication endpoint from a different origin.
+
+The problem is that you're setting CORS headers only for the OPTIONS request, but not for the actual POST request. When the actual POST request is made, those headers are missing, which is why the browser is blocking the request.
+
+Here's how you can fix this:
+
+
+Fixed Google Auth API Handler
+Code 
+Key changes I made:
+
+Moved the CORS headers outside the OPTIONS condition, so they're applied to all requests (including POST)
+Changed the Access-Control-Allow-Origin from * (wildcard) to the specific origin that needs access (https://pro-project-gilt.vercel.app)
+This is a common CORS issue - you need to ensure that the actual response includes the CORS headers, not just the preflight OPTIONS response.
+
+If you have multiple frontends that need to access this API, you could:
+
+Use an environment variable to configure allowed origins
+Create a list of allowed origins and check if the requesting origin is in that list
+Go back to using * if you want to allow access from any origin (though this is less secure)
+Would you like me to show you any of these alternative implementations?
+
+
+
+
+
+import type { NextApiRequest, NextApiResponse } from "next" import { query } from "../../../database/connection" import { requireAdmin, handleCors, setCorsHeaders } from "../../../middleware/auth-middleware" import { subDays, subMonths, format, startOfDay, endOfDay } from "date-fns" export def
+
+pasted
+
+
+import type { NextApiRequest, NextApiResponse } from "next" import jwt from "jsonwebtoken" import { applyCors } from "./api-security" // JWT configuration const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_key" if (!JWT_SECRET) { console.warn("Warning: JWT_SECRET environment var
+
+pasted
+
+
+import type { NextApiRequest, NextApiResponse } from "next" // CORS configuration const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : ["https://admin-frontends.vercel.app", "https://onlu.vercel.app", "https://pro-project-gilt.vercel.app"] /**
+
+pasted
+
+Next see this
+Access to XMLHttpRequest at 'https://onlu.vercel.app/api/dashboard/stats?range=30days' from origin 'https://admin-frontends.vercel.app' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: It does not have HTTP ok status.
+See the code
+See the auth middleware
+See the api security
+
+Edit
+Based on the additional code samples and error messages, I can now see the CORS issue more clearly. The problem with your dashboard stats endpoint is that the preflight request isn't being handled correctly.
+
+Let's look at all the relevant pieces:
+
+From api-security.ts, you have good CORS configuration with a list of allowed origins
+In the dashboard stats API, you're using handleCors but there might be an issue with how it's being handled in the admin authentication flow
+The error message indicates the preflight request is failing with a non-OK status code
+Here's a solution to fix the CORS issue with your dashboard stats endpoint:
+
+
+Fixed Dashboard Stats API Handler
+Code 
+The main issues I fixed:
+
+Direct CORS handling: Rather than relying on nested middleware functions to handle CORS, I apply the CORS headers directly at the start of the request lifecycle.
+OPTIONS response: I made sure to return a proper 200 status code for OPTIONS requests before any authentication logic runs.
+Simplified flow: Removed the handleCors and setCorsHeaders references that might be conflicting with proper CORS handling.
+For your authentication flow with respect to CORS, I also recommend reviewing the authentication middleware to ensure it properly handles OPTIONS requests before running any authentication logic. Here's a suggested fix for your auth middleware:
+
+
+Fixed Authentication Middleware
+Code 
+The main improvements here are:
+
+Always applying CORS headers at the start of each middleware function
+Adding dedicated handling for OPTIONS requests before any authentication logic runs
+Making sure the preflight request always gets a 200 OK response
+This ensures that browsers can properly complete the preflight request before sending the actual authentication request with credentials.
+
+
+
+
+
+
+
 import type { NextApiRequest, NextApiResponse } from "next"
 import { query } from "../../../database/connection"
-import { requireAdmin, handleCors, setCorsHeaders } from "../../../middleware/auth-middleware"
+import { requireAdmin } from "../../../middleware/auth-middleware"
+import { applyCors } from "../../../middleware/api-security"
 import { subDays, subMonths, format, startOfDay, endOfDay } from "date-fns"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Handle CORS preflight request
-  if (handleCors(req, res)) return
+  // Always apply CORS headers first
+  applyCors(req, res)
+  
+  // Handle OPTIONS request properly
+  if (req.method === "OPTIONS") {
+    return res.status(200).end()
+  }
 
   // Admin only endpoint
   return new Promise<void>((resolve, reject) => {
@@ -16,7 +139,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       } catch (error) {
         console.error("Error in getDashboardStats:", error)
         if (!res.writableEnded) {
-          setCorsHeaders(res)
           res.status(500).json({ error: "Server error processing dashboard stats request" })
         }
         reject(error)
@@ -175,11 +297,10 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
       revenue: Number.parseFloat(row.revenue),
     }))
 
-    // Set CORS headers
-    setCorsHeaders(res)
+  
 
-    // Return dashboard stats
-    return res.status(200).json({
+     // Return dashboard stats
+     return res.status(200).json({
       data: {
         totalSales,
         totalOrders,
@@ -192,7 +313,6 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
     })
   } catch (error) {
     console.error("Error fetching dashboard stats:", error)
-    setCorsHeaders(res)
     return res.status(500).json({ error: "Internal server error" })
   }
 }

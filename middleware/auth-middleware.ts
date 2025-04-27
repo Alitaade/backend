@@ -31,8 +31,14 @@ interface AuthenticatedRequest extends NextApiRequest {
  */
 export const authenticateUser = (req: AuthenticatedRequest, res: NextApiResponse, next: () => void) => {
   try {
-    // Apply CORS headers
+    // Apply CORS headers first
     applyCors(req, res)
+    
+    // Handle OPTIONS requests before authentication
+    if (req.method === "OPTIONS") {
+      res.status(200).end()
+      return
+    }
 
     // Get token from Authorization header
     const authHeader = req.headers.authorization
@@ -82,7 +88,16 @@ export const authenticateUser = (req: AuthenticatedRequest, res: NextApiResponse
  */
 export const requireAdmin = (req: AuthenticatedRequest, res: NextApiResponse, next: () => void) => {
   try {
-    // First authenticate the user
+    // Always apply CORS headers first
+    applyCors(req, res)
+    
+    // Handle OPTIONS requests before admin check
+    if (req.method === "OPTIONS") {
+      res.status(200).end()
+      return
+    }
+    
+    // Then authenticate the user
     authenticateUser(req, res, () => {
       // Check if user is admin
       if (!req.user?.is_admin) {

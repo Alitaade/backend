@@ -2,11 +2,13 @@ import type { NextApiRequest, NextApiResponse } from "next"
 import { googleAuth } from "../../../controllers/auth-controller"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Set CORS headers for all requests (not just OPTIONS)
+  res.setHeader("Access-Control-Allow-Origin", "https://pro-project-gilt.vercel.app")
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+  
   // Handle CORS preflight request (OPTIONS)
   if (req.method === "OPTIONS") {
-    res.setHeader("Access-Control-Allow-Origin", "*")
-    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
     return res.status(200).end()
   }
 
@@ -24,4 +26,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(500).json({ error: "Internal server error" })
   }
 }
-
