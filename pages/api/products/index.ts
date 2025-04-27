@@ -1,11 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { query } from "../../../database/connection"
 import { createNewProduct, getProducts } from "../../../controllers/product-controller"
-import { requireAdmin, handleCors, setCorsHeaders } from "../../../middleware/auth-middleware"
+import { requireAdmin } from "../../../middleware/auth-middleware"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Handle CORS preflight request
-  if (handleCors(req, res)) return
+
 
   try {
      // Normalize query parameters - map 'category' to 'category_id' if it exists
@@ -35,16 +34,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
 
       default:
-        setCorsHeaders(res)
+        
         res.setHeader("Allow", ["GET", "POST", "OPTIONS"])
         return res.status(405).json({ error: "Method not allowed" })
     }
   } catch (error) {
     console.error("Unhandled error in products handler:", error)
-    if (!res.writableEnded) {
-      setCorsHeaders(res)
-      return res.status(500).json({ error: "Internal server error" })
-    }
+  
   }
 }
 
@@ -154,8 +150,7 @@ async function getProductsHandler(req: NextApiRequest, res: NextApiResponse) {
     // Calculate pagination metadata
     const totalPages = Math.ceil(total / Number(limit))
 
-    // Set CORS headers
-    setCorsHeaders(res)
+    
 
     // Return paginated response
     return res.status(200).json({
@@ -167,7 +162,7 @@ async function getProductsHandler(req: NextApiRequest, res: NextApiResponse) {
     })
   } catch (error) {
     console.error("Error fetching products:", error)
-    setCorsHeaders(res)
+    
     return res.status(500).json({ error: "Internal server error" })
   }
 }
