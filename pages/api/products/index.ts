@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { query } from "../../../database/connection"
-import { createNewProduct } from "../../../controllers/product-controller"
+import { createNewProduct, getProducts } from "../../../controllers/product-controller"
 import { requireAdmin, handleCors, setCorsHeaders } from "../../../middleware/auth-middleware"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -8,10 +8,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (handleCors(req, res)) return
 
   try {
+     // Normalize query parameters - map 'category' to 'category_id' if it exists
+     if (req.query.category && !req.query.category_id) {
+      req.query.category_id = req.query.category;
+    }
     switch (req.method) {
       case "GET":
         // Public endpoint - get all products
-        return await getProductsHandler(req, res)
+        return await getProducts(req, res)
 
       case "POST":
         // Admin only - create a new product

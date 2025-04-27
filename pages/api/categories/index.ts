@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { query } from "../../../database/connection"
-import { createNewCategory } from "../../../controllers/category-controller"
+import { createNewCategory, getCategories } from "../../../controllers/category-controller"
 import { requireAdmin, handleCors, setCorsHeaders } from "../../../middleware/auth-middleware"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -11,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     switch (req.method) {
       case "GET":
         // Public endpoint - get all categories
-        return await getCategoriesHandler(req, res)
+        return await getCategories(req, res)
 
       case "POST":
         // Admin only - create a new category

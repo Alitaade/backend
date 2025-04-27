@@ -1,21 +1,52 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 
-// List of allowed origins for CORS
-const allowedOrigins = [
-  "https://onlu.vercel.app",
-  "https://www.onlu.vercel.app",
-  "https://pro-project-gilt.vercel.app",
-  "https://www.pro-project-gilt.vercel.app",
-  // Admin frontend domains
-  "https://admin-frontends.vercel.app",
-  "https://www.admin-frontends.vercel.app",
-  // Add your production domains here
-]
+// CORS configuration
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",")
+  : ["https://admin-frontends.vercel.app", "https://onlu.vercel.app", "https://pro-project-gilt.vercel.app"]
 
-// Add localhost for development
-if (process.env.NODE_ENV === "development") {
-  allowedOrigins.push("http://localhost:3000")
-  allowedOrigins.push("http://localhost:3001")
+/**
+ * Apply CORS headers to the response
+ */
+export const applyCors = (req: NextApiRequest, res: NextApiResponse) => {
+  // Get the origin from the request
+  const origin = req.headers.origin || ""
+
+  // Check if the origin is allowed
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin)
+  } else if (process.env.NODE_ENV === "development") {
+    // In development, allow any origin
+    res.setHeader("Access-Control-Allow-Origin", "*")
+  } else {
+    // Default to the main frontend in production
+    res.setHeader("Access-Control-Allow-Origin", "https://onlu.vercel.app")
+  }
+
+  // Set other CORS headers
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-API-Key, X-CSRF-Token, X-Requested-With",
+  )
+  res.setHeader("Access-Control-Allow-Credentials", "true")
+  res.setHeader("Access-Control-Max-Age", "86400") // 24 hours
+}
+
+/**
+ * Handle CORS preflight requests
+ */
+export const handleCorsPreflightRequest = (req: NextApiRequest, res: NextApiResponse): boolean => {
+  // Apply CORS headers
+  applyCors(req, res)
+
+  // Handle OPTIONS requests
+  if (req.method === "OPTIONS") {
+    res.status(200).end()
+    return true
+  }
+
+  return false
 }
 
 // API key validation
@@ -30,38 +61,6 @@ export const validateApiKey = (req: NextApiRequest, res: NextApiResponse, next: 
 
   if (!apiKey || apiKey !== validApiKey) {
     return res.status(401).json({ error: "Unauthorized - Invalid API key" })
-  }
-
-  next()
-}
-
-// CORS middleware
-export const corsMiddleware = (req: NextApiRequest, res: NextApiResponse, next: () => void) => {
-  // Get the origin from the request headers
-  const origin = (req.headers.origin as string) || ""
-
-  // Check if the origin is in our list of allowed origins
-  const isAllowedOrigin =
-    allowedOrigins.includes(origin) || (process.env.NODE_ENV === "development" && origin.startsWith("http://localhost"))
-
-  // Set CORS headers for all requests
-  if (isAllowedOrigin) {
-    res.setHeader("Access-Control-Allow-Origin", origin)
-    res.setHeader("Access-Control-Allow-Credentials", "true")
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
-    res.setHeader(
-      "Access-Control-Allow-Headers",
-      "Content-Type, Authorization, X-API-Key, x-api-key, authorization, X-CSRF-Token",
-    )
-  } else {
-    // For non-allowed origins, log the blocked origin
-    console.warn(`Blocked request from unauthorized origin: ${origin}`)
-  }
-
-  // Handle preflight requests
-  if (req.method === "OPTIONS") {
-    res.status(200).end()
-    return // Important: Stop execution here for OPTIONS requests
   }
 
   next()
@@ -114,29 +113,38 @@ export const rateLimitMiddleware = (req: NextApiRequest, res: NextApiResponse, n
 // Combined security middleware
 export const applyApiSecurity = (req: NextApiRequest, res: NextApiResponse, next: () => void) => {
   // Apply CORS first
-  corsMiddleware(req, res, () => {
-    // Skip other middleware for OPTIONS requests - middleware already handled it
-    if (req.method === "OPTIONS") {
-      return
-    }
+  applyCors(req, res)
+  if (req.method === "OPTIONS") {
+    return
+  }
 
-    // Then rate limiting
-    rateLimitMiddleware(req, res, () => {
-      // Finally API key validation
-      validateApiKey(req, res, next)
-    })
+  // Then rate limiting
+  rateLimitMiddleware(req, res, () => {
+    // Finally API key validation
+    validateApiKey(req, res, next)
   })
 }
 
-// Helper function to apply middleware to API routes
-type ApiHandler = (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void
+/**
+ * Apply security middleware to API routes
+ */
+export const applyMiddleware = (handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void) => {
+  return async (req: NextApiRequest, res: NextApiResponse) => {
+    // Handle CORS preflight request
+    if (handleCorsPreflightRequest(req, res)) {
+      return
+    }
 
-export function applyMiddleware(handler: ApiHandler): ApiHandler {
-  return (req: NextApiRequest, res: NextApiResponse) => {
-    // Create a "next" function that calls the handler
-    const next = () => handler(req, res)
+    // Apply CORS headers for all requests
+    applyCors(req, res)
 
-    // Apply the security middleware
-    applyApiSecurity(req, res, next)
+    // Add security headers
+    res.setHeader("X-Content-Type-Options", "nosniff")
+    res.setHeader("X-Frame-Options", "DENY")
+    res.setHeader("X-XSS-Protection", "1; mode=block")
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin")
+
+    // Call the handler
+    return handler(req, res)
   }
 }

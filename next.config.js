@@ -9,25 +9,22 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
+    domains: ["res.cloudinary.com", "images.unsplash.com", "via.placeholder.com"],
     unoptimized: true,
   },
+  // Remove any CORS configuration from here to avoid conflicts with our middleware
   async headers() {
     return [
       {
-        // Apply CORS headers to all routes
+        // Apply basic security headers to all routes
         source: "/api/:path*",
         headers: [
-          { key: "Access-Control-Allow-Credentials", value: "true" },
-          { key: "Access-Control-Allow-Origin", value: "*" }, // This will be overridden by our middleware for specific origins
-          {
-            key: "Access-Control-Allow-Methods",
-            value: "GET,DELETE,PATCH,POST,PUT,OPTIONS",
-          },
-          {
-            key: "Access-Control-Allow-Headers",
-            value:
-              "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, X-API-Key",
-          },
+          { key: "X-DNS-Prefetch-Control", value: "on" },
+          { key: "X-XSS-Protection", value: "1; mode=block" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "origin-when-cross-origin" },
+          // Remove the CORS headers from here - they'll be handled by middleware
         ],
       },
     ]

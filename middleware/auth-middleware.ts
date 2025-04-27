@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import jwt from "jsonwebtoken"
+import { applyCors } from "./api-security"
 
 // JWT configuration
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_key"
@@ -30,6 +31,9 @@ interface AuthenticatedRequest extends NextApiRequest {
  */
 export const authenticateUser = (req: AuthenticatedRequest, res: NextApiResponse, next: () => void) => {
   try {
+    // Apply CORS headers
+    applyCors(req, res)
+
     // Get token from Authorization header
     const authHeader = req.headers.authorization
 
@@ -99,6 +103,15 @@ export const requireAdmin = (req: AuthenticatedRequest, res: NextApiResponse, ne
  */
 export function authMiddleware(handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void) {
   return (req: AuthenticatedRequest, res: NextApiResponse) => {
+    // Apply CORS headers
+    applyCors(req, res)
+
+    // Handle OPTIONS requests
+    if (req.method === "OPTIONS") {
+      res.status(200).end()
+      return
+    }
+
     // Create a "next" function that calls the handler
     const next = () => handler(req, res)
 
@@ -112,6 +125,15 @@ export function authMiddleware(handler: (req: NextApiRequest, res: NextApiRespon
  */
 export function adminMiddleware(handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void) {
   return (req: AuthenticatedRequest, res: NextApiResponse) => {
+    // Apply CORS headers
+    applyCors(req, res)
+
+    // Handle OPTIONS requests
+    if (req.method === "OPTIONS") {
+      res.status(200).end()
+      return
+    }
+
     // Create a "next" function that calls the handler
     const next = () => handler(req, res)
 
@@ -120,31 +142,6 @@ export function adminMiddleware(handler: (req: NextApiRequest, res: NextApiRespo
   }
 }
 
-/**
- * Helper function to set CORS headers consistently
- */
-export const setCorsHeaders = (res: NextApiResponse) => {
-  // Allow requests from both user and admin frontends
-  const allowedOrigins = process.env.ALLOWED_ORIGINS || "https://admin-frontends.vercel.app,https://onlu.vercel.app"
-
-  const origin = Array.isArray(allowedOrigins) ? allowedOrigins.join(",") : allowedOrigins
-
-  res.setHeader("Access-Control-Allow-Origin", origin)
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
-  res.setHeader("Access-Control-Allow-Credentials", "true")
-}
-
-/**
- * Helper function to handle CORS preflight requests
- */
-export const handleCors = (req: NextApiRequest, res: NextApiResponse): boolean => {
-  setCorsHeaders(res)
-
-  if (req.method === "OPTIONS") {
-    res.status(200).end()
-    return true
-  }
-
-  return false
+export const handleCors = (req: NextApiRequest, res: NextApiResponse) => {
+  applyCors(req, res)
 }
