@@ -66,6 +66,31 @@ export const findUserById = async (id: number): Promise<User | null> => {
   }
 };
 
+export const findUserByPhone = async (phone: string): Promise<User | null> => {
+  try {
+    const query = `
+      SELECT 
+        id,
+        email,
+        phone,
+        first_name,
+        last_name,
+        is_admin,
+        created_at,
+        updated_at
+      FROM users
+      WHERE phone = $1
+      LIMIT 1
+    `
+
+    const result = await query(query, [phone])
+    return result.rows[0] || null
+  } catch (error) {
+    console.error("Error finding user by phone:", error)
+    throw error
+  }
+}
+
 export const createUser = async (userData: UserInput): Promise<User> => {
   try {
     // Hash the password if provided

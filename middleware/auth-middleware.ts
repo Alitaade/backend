@@ -1,6 +1,17 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import jwt from "jsonwebtoken";
 
+// List of allowed origins for CORS
+const allowedOrigins = [
+  "https://onlu.vercel.app",
+  "https://www.onlu.vercel.app",
+  "https://pro-project-gilt.vercel.app",
+  "https://www.pro-project-gilt.vercel.app",
+  "https://admin-frontends.vercel.app",
+  "http://localhost:3000",
+  "http://localhost:3001"
+];
+
 // JWT configuration
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_key";
 if (!JWT_SECRET) {
@@ -26,6 +37,49 @@ interface AuthenticatedRequest extends NextApiRequest {
     is_admin: boolean;
   };
 }
+
+// CORS helper functions
+export const setCorsHeaders = (res: NextApiResponse, origin: string) => {
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-API-Key, x-api-key, authorization, X-CSRF-Token, X-Requested-With"
+  );
+  res.setHeader("Access-Control-Max-Age", "86400"); // 24 hours
+};
+
+export const handleCors = (req: NextApiRequest, res: NextApiResponse) => {
+  const origin = req.headers.origin || "";
+  const isAllowedOrigin = allowedOrigins.includes(origin) || process.env.NODE_ENV === "development";
+
+  if (isAllowedOrigin) {
+    setCorsHeaders(res, origin);
+  } else {
+    // For security, we set a default allowed origin if the request origin is not allowed
+    setCorsHeaders(res, allowedOrigins[0]);
+  }
+
+  // Handle preflight requests
+  if (req.method === "OPTIONS") {
+    res.status(200).end();
+    return true;
+  }
+
+  return false;
+};
+
+export const applyCors = (handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void) => {
+  return async (req: NextApiRequest, res: NextApiResponse) => {
+    // Handle CORS
+    const isPreflight = handleCors(req, res);
+    if (isPreflight) return;
+
+    // Continue to the handler
+    return handler(req, res);
+  };
+};
 
 /**
  * Middleware to authenticate user from JWT token
@@ -107,6 +161,7 @@ export const requireAdmin = (
     return res.status(500).json({ error: "Internal server error" });
   }
 };
+
 // Add this to your auth-middleware.ts file
 export function authMiddleware(
   handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void
