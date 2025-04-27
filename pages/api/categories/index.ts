@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { query } from "../../../database/connection"
 import { createNewCategory, getCategories } from "../../../controllers/category-controller"
-import { requireAdmin, handleCors, setCorsHeaders } from "../../../middleware/auth-middleware"
+import { requireAdmin } from "../../../middleware/auth-middleware"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
 
@@ -30,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
 
       default:
-        setCorsHeaders(res)
+        
         res.setHeader("Allow", ["GET", "POST", "OPTIONS"])
         return res.status(405).json({
           error: `Method ${req.method} not allowed`,
@@ -40,7 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (error) {
     console.error("Unhandled error in categories handler:", error)
     if (!res.writableEnded) {
-      setCorsHeaders(res)
+      
       return res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -93,8 +93,7 @@ async function getCategoriesHandler(req: NextApiRequest, res: NextApiResponse) {
     // Calculate pagination metadata
     const totalPages = Math.ceil(total / Number(limit))
 
-    // Set CORS headers
-    setCorsHeaders(res)
+    
 
     // Return paginated response
     return res.status(200).json({
@@ -106,7 +105,7 @@ async function getCategoriesHandler(req: NextApiRequest, res: NextApiResponse) {
     })
   } catch (error) {
     console.error("Error fetching categories:", error)
-    setCorsHeaders(res)
+    
     return res.status(500).json({ error: "Internal server error" })
   }
 }

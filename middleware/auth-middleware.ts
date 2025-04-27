@@ -39,8 +39,11 @@ interface AuthenticatedRequest extends NextApiRequest {
 }
 
 // CORS helper functions
-export const setCorsHeaders = (res: NextApiResponse, origin: string) => {
-  res.setHeader("Access-Control-Allow-Origin", origin);
+const setCorsHeaders = (res: NextApiResponse, origin: string) => {
+  // Always set a valid origin, default to the first allowed origin if none provided
+  const validOrigin = origin || allowedOrigins[0];
+  
+  res.setHeader("Access-Control-Allow-Origin", validOrigin);
   res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   res.setHeader(
@@ -50,14 +53,15 @@ export const setCorsHeaders = (res: NextApiResponse, origin: string) => {
   res.setHeader("Access-Control-Max-Age", "86400"); // 24 hours
 };
 
-export const handleCors = (req: NextApiRequest, res: NextApiResponse) => {
+const handleCors = (req: NextApiRequest, res: NextApiResponse) => {
   const origin = req.headers.origin || "";
   const isAllowedOrigin = allowedOrigins.includes(origin) || process.env.NODE_ENV === "development";
 
-  if (isAllowedOrigin) {
+  // Always set CORS headers, but use the appropriate origin
+  if (isAllowedOrigin && origin) {
     setCorsHeaders(res, origin);
   } else {
-    // For security, we set a default allowed origin if the request origin is not allowed
+    // Use the first allowed origin as default
     setCorsHeaders(res, allowedOrigins[0]);
   }
 
@@ -72,12 +76,19 @@ export const handleCors = (req: NextApiRequest, res: NextApiResponse) => {
 
 export const applyCors = (handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void) => {
   return async (req: NextApiRequest, res: NextApiResponse) => {
-    // Handle CORS
-    const isPreflight = handleCors(req, res);
-    if (isPreflight) return;
+    try {
+      // Handle CORS
+      const isPreflight = handleCors(req, res);
+      if (isPreflight) return;
 
-    // Continue to the handler
-    return handler(req, res);
+      // Continue to the handler
+      return handler(req, res);
+    } catch (error) {
+      console.error("CORS middleware error:", error);
+      // Ensure we still set CORS headers even if there's an error
+      setCorsHeaders(res, allowedOrigins[0]);
+      res.status(500).json({ error: "Internal server error" });
+    }
   };
 };
 
