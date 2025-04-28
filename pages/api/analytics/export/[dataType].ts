@@ -35,7 +35,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       case "orders":
         const ordersQuery = `
           SELECT 
-            o.id, o.order_number, o.status, o.payment_status, o.total, 
+            o.id, o.order_number, o.status, o.payment_status, o.total_amount as total, 
             o.shipping_address, o.created_at,
             u.email as user_email, u.first_name, u.last_name
           FROM orders o
@@ -63,7 +63,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       case "products":
         const productsQuery = `
           SELECT 
-            p.id, p.name, p.description, p.base_price, p.is_active, p.is_featured,
+            p.id, p.name, p.description, p.price as base_price, 
+            p.stock_quantity > 0 as is_active, false as is_featured,
             c.name as category, p.created_at
           FROM products p
           LEFT JOIN categories c ON p.category_id = c.id
@@ -98,34 +99,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           "Created At",
           "WhatsApp",
           "Phone",
-        ]
-        break
-
-      case "transactions":
-        const transactionsQuery = `
-          SELECT 
-            t.id, t.reference, t.order_id, t.amount, t.currency, 
-            t.payment_method, t.status, t.created_at,
-            u.email as user_email
-          FROM transactions t
-          LEFT JOIN orders o ON t.order_id = o.id
-          LEFT JOIN users u ON o.user_id = u.id
-          ${dateFilter.replace("created_at", "t.created_at")}
-          ORDER BY t.created_at DESC
-        `
-        const transactionsResult = await query(transactionsQuery, queryParams)
-        data = transactionsResult.rows
-        filename = "transactions_export.csv"
-        headers = [
-          "ID",
-          "Reference",
-          "Order ID",
-          "Amount",
-          "Currency",
-          "Payment Method",
-          "Status",
-          "Date",
-          "User Email",
         ]
         break
 

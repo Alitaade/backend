@@ -17,7 +17,7 @@ export const getDashboardStats = async (req: NextApiRequest, res: NextApiRespons
     const orderCount = Number.parseInt(orderCountResult.rows[0].count)
 
     // Get total revenue
-    const revenueResult = await query("SELECT SUM(total) FROM orders WHERE payment_status = 'paid'")
+    const revenueResult = await query("SELECT SUM(total_amount) as sum FROM orders WHERE payment_status = 'paid'")
     const totalRevenue = Number.parseFloat(revenueResult.rows[0].sum || 0)
 
     // Get recent orders
@@ -35,7 +35,7 @@ export const getDashboardStats = async (req: NextApiRequest, res: NextApiRespons
       `SELECT 
         DATE(created_at) as date, 
         COUNT(*) as order_count, 
-        SUM(total) as revenue
+        SUM(total_amount) as revenue
        FROM orders
        WHERE created_at >= NOW() - INTERVAL '7 days'
        GROUP BY DATE(created_at)
@@ -46,12 +46,12 @@ export const getDashboardStats = async (req: NextApiRequest, res: NextApiRespons
     // Get top selling products
     const topProductsResult = await query(
       `SELECT 
-        p.id, p.name, p.base_price,
+        p.id, p.name, p.price as base_price,
         COUNT(oi.id) as order_count,
         SUM(oi.quantity) as total_quantity
        FROM order_items oi
        JOIN products p ON oi.product_id = p.id
-       GROUP BY p.id, p.name, p.base_price
+       GROUP BY p.id, p.name, p.price
        ORDER BY total_quantity DESC
        LIMIT 5`,
     )
@@ -136,7 +136,7 @@ export const getSalesReport = async (req: NextApiRequest, res: NextApiResponse) 
       SELECT 
         DATE(created_at) as date, 
         COUNT(*) as order_count, 
-        SUM(total) as revenue
+        SUM(total_amount) as revenue
       FROM orders
       ${dateFilter}
       GROUP BY DATE(created_at)
@@ -150,7 +150,7 @@ export const getSalesReport = async (req: NextApiRequest, res: NextApiResponse) 
       SELECT 
         payment_method, 
         COUNT(*) as order_count, 
-        SUM(total) as revenue
+        SUM(total_amount) as revenue
       FROM orders
       ${dateFilter}
       GROUP BY payment_method
@@ -169,7 +169,7 @@ export const getSalesReport = async (req: NextApiRequest, res: NextApiResponse) 
       JOIN order_items oi ON o.id = oi.order_id
       JOIN products p ON oi.product_id = p.id
       LEFT JOIN categories c ON p.category_id = c.id
-      ${dateFilter}
+      ${dateFilter.replace("created_at", "o.created_at")}
       GROUP BY c.name
     `
     const categoryResult = await query(categoryQuery, queryParams)
@@ -179,8 +179,8 @@ export const getSalesReport = async (req: NextApiRequest, res: NextApiResponse) 
     const totalsQuery = `
       SELECT 
         COUNT(*) as total_orders, 
-        SUM(total) as total_revenue,
-        AVG(total) as average_order_value
+        SUM(total_amount) as total_revenue,
+        AVG(total_amount) as average_order_value
       FROM orders
       ${dateFilter}
     `
@@ -227,7 +227,7 @@ export const exportData = async (req: NextApiRequest, res: NextApiResponse) => {
       case "orders":
         const ordersQuery = `
           SELECT 
-            o.id, o.order_number, o.status, o.payment_status, o.total, 
+            o.id, o.order_number, o.status, o.payment_status, o.total_amount as total, 
             o.shipping_address, o.created_at,
             u.email as user_email, u.first_name, u.last_name
           FROM orders o
@@ -255,7 +255,8 @@ export const exportData = async (req: NextApiRequest, res: NextApiResponse) => {
       case "products":
         const productsQuery = `
           SELECT 
-            p.id, p.name, p.description, p.base_price, p.is_active, p.is_featured,
+            p.id, p.name, p.description, p.price as base_price, 
+            p.stock_quantity > 0 as is_active, false as is_featured,
             c.name as category, p.created_at
           FROM products p
           LEFT JOIN categories c ON p.category_id = c.id
@@ -290,34 +291,6 @@ export const exportData = async (req: NextApiRequest, res: NextApiResponse) => {
           "Created At",
           "WhatsApp",
           "Phone",
-        ]
-        break
-
-      case "transactions":
-        const transactionsQuery = `
-          SELECT 
-            t.id, t.reference, t.order_id, t.amount, t.currency, 
-            t.payment_method, t.status, t.created_at,
-            u.email as user_email
-          FROM transactions t
-          LEFT JOIN orders o ON t.order_id = o.id
-          LEFT JOIN users u ON o.user_id = u.id
-          ${dateFilter.replace("created_at", "t.created_at")}
-          ORDER BY t.created_at DESC
-        `
-        const transactionsResult = await query(transactionsQuery, queryParams)
-        data = transactionsResult.rows
-        filename = "transactions_export.csv"
-        headers = [
-          "ID",
-          "Reference",
-          "Order ID",
-          "Amount",
-          "Currency",
-          "Payment Method",
-          "Status",
-          "Date",
-          "User Email",
         ]
         break
 

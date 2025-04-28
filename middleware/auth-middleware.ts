@@ -119,3 +119,15 @@ export function authMiddleware(
     authenticateUser(req, res, next);
   };
 }
+// Add this to your auth-middleware.ts file
+export function requireAdminMiddleware(
+  handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void
+) {
+  return (req: AuthenticatedRequest, res: NextApiResponse) => {
+    // Create a "next" function that calls the handler
+    const next = () => handler(req, res);
+
+    // Apply the admin authorization middleware
+    requireAdmin(req, res, next);
+  };
+}

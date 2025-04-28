@@ -1,141 +1,87 @@
 import type { NextApiRequest, NextApiResponse } from "next"
+import { query } from "../../../database/connection"
+import { requireAdminMiddleware } from "../../../middleware/auth-middleware"
+import { applyMiddleware } from "../../../middleware/api-security"
 
-// List of allowed origins for CORS
-const allowedOrigins = [
-  "https://onlu.vercel.app",
-  "https://www.onlu.vercel.app",
-  "https://pro-project-gilt.vercel.app",
-  "https://www.pro-project-gilt.vercel.app",
-  "https://admin-frontends.vercel.app",
-  "https://www.admin-frontends.vercel.app",
-  // Add your production domains here
-]
-
-// Add localhost for development
-if (process.env.NODE_ENV === "development") {
-  allowedOrigins.push("http://localhost:3000")
-  allowedOrigins.push("http://localhost:3001")
-}
-
-// API key validation
-export const validateApiKey = (req: NextApiRequest, res: NextApiResponse, next: () => void) => {
-  // Skip API key validation in development
-  if (process.env.NODE_ENV === "development") {
-    return next()
+async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Only allow GET requests for listing users
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" })
   }
 
-  const apiKey = req.headers["x-api-key"]
-  const validApiKey = process.env.API_SECRET_KEY
+  try {
+    // Extract query parameters
+    const { search, is_admin, profile_complete, page = 1, limit = 10 } = req.query
 
-  if (!apiKey || apiKey !== validApiKey) {
-    return res.status(401).json({ error: "Unauthorized - Invalid API key" })
-  }
+    // Build the SQL query
+    let sqlQuery = `
+      SELECT id, email, first_name, last_name, is_admin, profile_complete, 
+             created_at, updated_at, whatsapp, phone
+      FROM users
+      WHERE 1=1
+    `
+    const queryParams: any[] = []
+    let paramIndex = 1
 
-  next()
-}
-
-// CORS middleware
-export const corsMiddleware = (req: NextApiRequest, res: NextApiResponse, next: () => void) => {
-  // Get the origin from the request headers
-  const origin = (req.headers.origin as string) || ""
-
-  // Check if the origin is in our list of allowed origins
-  const isAllowedOrigin =
-    allowedOrigins.includes(origin) || (process.env.NODE_ENV === "development" && origin.startsWith("http://localhost"))
-
-  // Set CORS headers for all requests
-  if (isAllowedOrigin) {
-    res.setHeader("Access-Control-Allow-Origin", origin)
-    res.setHeader("Access-Control-Allow-Credentials", "true")
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
-    res.setHeader(
-      "Access-Control-Allow-Headers",
-      "Content-Type, Authorization, X-API-Key, x-api-key, authorization, X-CSRF-Token",
-    )
-  } else {
-    // For non-allowed origins, log the blocked origin
-    console.warn(`Blocked request from unauthorized origin: ${origin}`)
-  }
-
-  // Handle preflight requests
-  if (req.method === "OPTIONS") {
-    res.status(200).end()
-    return // Important: Stop execution here for OPTIONS requests
-  }
-
-  next()
-}
-
-// Rate limiting middleware
-const requestCounts = new Map<string, { count: number; resetTime: number }>()
-
-export const rateLimitMiddleware = (req: NextApiRequest, res: NextApiResponse, next: () => void) => {
-  // Get client IP
-  const clientIp = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown"
-
-  const key = `${clientIp}-${req.url}`
-  const now = Date.now()
-  const windowMs = 60 * 1000 // 1 minute window
-  const maxRequests = 60 // Max requests per minute
-
-  // Get or initialize request count data
-  const requestData = requestCounts.get(key) || {
-    count: 0,
-    resetTime: now + windowMs,
-  }
-
-  // Reset if outside window
-  if (now > requestData.resetTime) {
-    requestData.count = 0
-    requestData.resetTime = now + windowMs
-  }
-
-  // Increment request count
-  requestData.count++
-  requestCounts.set(key, requestData)
-
-  // Check if rate limit exceeded
-  if (requestData.count > maxRequests) {
-    return res.status(429).json({
-      error: "Too many requests, please try again later",
-      retryAfter: Math.ceil((requestData.resetTime - now) / 1000),
-    })
-  }
-
-  // Set rate limit headers
-  res.setHeader("X-RateLimit-Limit", maxRequests.toString())
-  res.setHeader("X-RateLimit-Remaining", (maxRequests - requestData.count).toString())
-  res.setHeader("X-RateLimit-Reset", Math.ceil(requestData.resetTime / 1000).toString())
-
-  next()
-}
-
-// Combined security middleware
-export const applyApiSecurity = (req: NextApiRequest, res: NextApiResponse, next: () => void) => {
-  // Apply CORS first
-  corsMiddleware(req, res, () => {
-    // Skip other middleware for OPTIONS requests - middleware already handled it
-    if (req.method === "OPTIONS") {
-      return
+    // Add search filter
+    if (search) {
+      sqlQuery += ` AND (
+        email ILIKE $${paramIndex} OR
+        first_name ILIKE $${paramIndex} OR
+        last_name ILIKE $${paramIndex} OR
+        CONCAT(first_name, ' ', last_name) ILIKE $${paramIndex}
+      )`
+      queryParams.push(`%${search}%`)
+      paramIndex++
     }
 
-    // Then rate limiting
-    rateLimitMiddleware(req, res, () => {
-      // Finally API key validation
-      validateApiKey(req, res, next)
+    // Add admin filter
+    if (is_admin !== undefined) {
+      sqlQuery += ` AND is_admin = $${paramIndex}`
+      queryParams.push(is_admin === "true")
+      paramIndex++
+    }
+
+    // Add profile complete filter
+    if (profile_complete !== undefined) {
+      sqlQuery += ` AND profile_complete = $${paramIndex}`
+      queryParams.push(profile_complete === "true")
+      paramIndex++
+    }
+
+    // Count total records for pagination
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM (${sqlQuery}) as filtered_users
+    `
+    const countResult = await query(countQuery, queryParams)
+    const total = Number.parseInt(countResult.rows[0].total)
+
+    // Add pagination
+    const offset = (Number(page) - 1) * Number(limit)
+    sqlQuery += ` ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`
+    queryParams.push(Number(limit), offset)
+
+    // Execute the query
+    const result = await query(sqlQuery, queryParams)
+
+    // Calculate pagination metadata
+    const totalPages = Math.ceil(total / Number(limit))
+
+    // Return paginated response
+    return res.status(200).json({
+      data: result.rows,
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      totalPages,
     })
-  })
-}
-
-// Helper function to apply middleware to API routes
-type ApiHandler = (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void
-
-export function applyMiddleware(handler: ApiHandler): ApiHandler {
-  return (req: NextApiRequest, res: NextApiResponse) => {
-    // Create a "next" function that calls the handler
-    const next = () => handler(req, res)
-
-    // Apply the security middleware
-    applyApiSecurity(req, res, next)
+  } catch (error) {
+    console.error("Error fetching users:", error)
+    return res.status(500).json({ error: "Internal server error" })
   }
 }
+
+// Apply admin authentication and CORS middleware
+// Fix your export line
+export default applyMiddleware(requireAdminMiddleware(handler))
