@@ -10,11 +10,15 @@ interface SalesByPeriodRow {
 
 interface RecentOrderRow {
   id: number;
+  user_id: number;
   order_number: string;
   total_amount: string;
   status: string;
   payment_status: string;
+  payment_method: string;
+  shipping_address: string;
   created_at: string;
+  updated_at: string;
   first_name: string;
   last_name: string;
   email: string;
@@ -28,9 +32,9 @@ interface OrderStatusRow {
 interface TopProductRow {
   id: number;
   name: string;
+  price: string;
   order_count: string;
-  units_sold: string;
-  revenue: string;
+  total_quantity: string;
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -95,15 +99,15 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
     const formattedStartDate = format(startOfDay(startDate), "yyyy-MM-dd HH:mm:ss");
     const formattedEndDate = format(endOfDay(endDate), "yyyy-MM-dd HH:mm:ss");
 
-    // Get total sales
-    const totalSalesQuery = `
-      SELECT COALESCE(SUM(total_amount), 0) as total_sales
+    // Get total revenue
+    const totalRevenueQuery = `
+      SELECT COALESCE(SUM(total_amount), 0) as total_revenue
       FROM orders
       WHERE created_at BETWEEN $1 AND $2
       AND payment_status = 'paid'
     `;
-    const totalSalesResult = await query(totalSalesQuery, [formattedStartDate, formattedEndDate]);
-    const totalSales = Number.parseFloat(totalSalesResult.rows[0].total_sales) || 0; // Default to 0 if null
+    const totalRevenueResult = await query(totalRevenueQuery, [formattedStartDate, formattedEndDate]);
+    const totalRevenue = Number.parseFloat(totalRevenueResult.rows[0].total_revenue) || 0;
 
     // Get total orders
     const totalOrdersQuery = `
@@ -112,23 +116,30 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
       WHERE created_at BETWEEN $1 AND $2
     `;
     const totalOrdersResult = await query(totalOrdersQuery, [formattedStartDate, formattedEndDate]);
-    const totalOrders = Number.parseInt(totalOrdersResult.rows[0].total_orders) || 0; // Default to 0 if null
+    const totalOrders = Number.parseInt(totalOrdersResult.rows[0].total_orders) || 0;
 
-    // Get new customers
-    const newCustomersQuery = `
-      SELECT COUNT(*) as new_customers
+    // Get total users
+    const totalUsersQuery = `
+      SELECT COUNT(*) as total_users
       FROM users
-      WHERE created_at BETWEEN $1 AND $2
-      AND is_admin = false
+      WHERE is_admin = false
     `;
-    const newCustomersResult = await query(newCustomersQuery, [formattedStartDate, formattedEndDate]);
-    const newCustomers = Number.parseInt(newCustomersResult.rows[0].new_customers) || 0; // Default to 0 if null
+    const totalUsersResult = await query(totalUsersQuery);
+    const totalUsers = Number.parseInt(totalUsersResult.rows[0].total_users) || 0;
+
+    // Get total products
+    const totalProductsQuery = `
+      SELECT COUNT(*) as total_products
+      FROM products
+    `;
+    const totalProductsResult = await query(totalProductsQuery);
+    const totalProducts = Number.parseInt(totalProductsResult.rows[0].total_products) || 0;
 
     // Get sales by day/month
     const timeFormat = range === "12months" ? "YYYY-MM" : "YYYY-MM-DD";
     const groupBy = range === "12months" ? "DATE_TRUNC('month', created_at)" : "DATE_TRUNC('day', created_at)";
 
-    const salesByPeriodQuery = `
+    const salesByDayQuery = `
       SELECT 
         ${groupBy} as date,
         COALESCE(SUM(total_amount), 0) as sales
@@ -138,36 +149,37 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
       GROUP BY ${groupBy}
       ORDER BY date ASC
     `;
-    const salesByPeriodResult = await query(salesByPeriodQuery, [formattedStartDate, formattedEndDate]);
+    const salesByDayResult = await query(salesByDayQuery, [formattedStartDate, formattedEndDate]);
 
-    // Format sales by period
-    let salesByPeriod = salesByPeriodResult.rows.map((row: SalesByPeriodRow) => ({
-      date: format(new Date(row.date), range === "12months" ? "MMM yyyy" : "MMM dd"),
-      sales: Number.parseFloat(row.sales) || 0, // Default to 0 if null
+    // Format sales by period - Keep as strings to match frontend expectations
+    let salesByDay = salesByDayResult.rows.map((row: SalesByPeriodRow) => ({
+      date: format(new Date(row.date), range === "12months" ? "yyyy-MM" : "yyyy-MM-dd"),
+      sales: row.sales,
     }));
 
     // Generate placeholder data if no sales data is found
-    if (salesByPeriodResult.rows.length === 0) {
+    if (salesByDayResult.rows.length === 0) {
       if (range === "12months") {
         // For monthly data
         const months = eachMonthOfInterval({ start: startDate, end: endDate });
-        salesByPeriod = months.map(date => ({
-          date: format(date, "MMM yyyy"),
-          sales: 0
+        salesByDay = months.map(date => ({
+          date: format(date, "yyyy-MM"),
+          sales: "0",
         }));
       } else {
         // For daily data
         const days = eachDayOfInterval({ start: startDate, end: endDate });
-        salesByPeriod = days.map(date => ({
-          date: format(date, "MMM dd"),
-          sales: 0
+        salesByDay = days.map(date => ({
+          date: format(date, "yyyy-MM-dd"),
+          sales: "0",
         }));
       }
     }
 
-    // Get recent orders
+    // Get recent orders with user details
     const recentOrdersQuery = `
-      SELECT o.*, 
+      SELECT o.id, o.user_id, o.order_number, o.total_amount, o.status, o.payment_status, 
+             o.payment_method, o.shipping_address, o.created_at, o.updated_at,
              u.first_name, u.last_name, u.email
       FROM orders o
       LEFT JOIN users u ON o.user_id = u.id
@@ -176,106 +188,80 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
     `;
     const recentOrdersResult = await query(recentOrdersQuery);
 
-    // Format recent orders
+    // Format recent orders to match frontend expectations
     const recentOrders = recentOrdersResult.rows.map((order: RecentOrderRow) => ({
       id: order.id,
+      user_id: order.user_id,
       order_number: order.order_number,
-      total: Number.parseFloat(order.total_amount) || 0, // Default to 0 if null
-      status: order.status || 'unknown', // Default status
-      payment_status: order.payment_status || 'unknown', // Default payment status
+      status: order.status || 'processing',
+      payment_status: order.payment_status || 'pending',
+      payment_method: order.payment_method || 'card',
+      shipping_address: order.shipping_address || '',
+      total: Number.parseFloat(order.total_amount) || 0,
       created_at: order.created_at,
-      customer: {
-        name: `${order.first_name || ''} ${order.last_name || ''}`.trim() || 'Guest User',
+      updated_at: order.updated_at,
+      user: {
+        first_name: order.first_name || '',
+        last_name: order.last_name || '',
         email: order.email || 'No email provided',
       },
     }));
 
-    // Get order status counts
-    const orderStatusQuery = `
-      SELECT 
-        status,
-        COUNT(*) as count
-      FROM orders
-      WHERE created_at BETWEEN $1 AND $2
-      GROUP BY status
-    `;
-    const orderStatusResult = await query(orderStatusQuery, [formattedStartDate, formattedEndDate]);
-
-    // Format order status counts
-    let orderStatuses = orderStatusResult.rows.map((row: OrderStatusRow) => ({
-      status: row.status || 'unknown', // Default status if null
-      count: Number.parseInt(row.count) || 0, // Default to 0 if null
-    }));
-
-    // If no order statuses found, provide default statuses with zero count
-    if (!orderStatuses || orderStatuses.length === 0) {
-      orderStatuses = [
-        { status: 'processing', count: 0 },
-        { status: 'shipped', count: 0 },
-        { status: 'delivered', count: 0 },
-        { status: 'cancelled', count: 0 }
-      ];
-    }
-
-    // Get top products - fixed to match schema
+    // Get top products with price and order details
     const topProductsQuery = `
       SELECT 
         p.id,
         p.name,
+        p.price,
         COUNT(DISTINCT o.id) as order_count,
-        SUM(oi.quantity) as units_sold,
-        SUM(oi.price * oi.quantity) as revenue
+        SUM(oi.quantity) as total_quantity
       FROM order_items oi
       JOIN products p ON oi.product_id = p.id
       JOIN orders o ON oi.order_id = o.id
       WHERE o.created_at BETWEEN $1 AND $2
       AND o.payment_status = 'paid'
-      GROUP BY p.id, p.name
-      ORDER BY units_sold DESC
+      GROUP BY p.id, p.name, p.price
+      ORDER BY total_quantity DESC
       LIMIT 5
     `;
     const topProductsResult = await query(topProductsQuery, [formattedStartDate, formattedEndDate]);
 
-    // Format top products
+    // Format top products to match frontend expectations - convert numbers to strings
     let topProducts = topProductsResult.rows.map((row: TopProductRow) => ({
       id: row.id,
-      name: row.name || 'Unknown Product', // Default name if null
-      order_count: Number.parseInt(row.order_count) || 0, // Default to 0 if null
-      units_sold: Number.parseInt(row.units_sold) || 0, // Default to 0 if null
-      revenue: Number.parseFloat(row.revenue) || 0, // Default to 0 if null
+      name: row.name || 'Unknown Product',
+      price: Number.parseFloat(row.price),
+      order_count: row.order_count,
+      total_quantity: row.total_quantity,
     }));
 
-    // If no top products found, return an empty array (frontend should handle this)
+    // If no top products found, return an empty array
     if (!topProducts) {
       topProducts = [];
     }
 
-    // Return dashboard stats with consistent data structures
+    // Return dashboard stats with consistent data structures matching frontend expectations
     return res.status(200).json({
-      data: {
-        totalSales,
-        totalOrders,
-        newCustomers,
-        salesByPeriod: salesByPeriod || [], // Ensure it's never undefined
-        recentOrders: recentOrders || [], // Ensure it's never undefined
-        orderStatuses: orderStatuses || [], // Ensure it's never undefined
-        topProducts: topProducts || [], // Ensure it's never undefined
-      },
+      totalUsers,
+      totalOrders,
+      totalProducts,
+      totalRevenue,
+      salesByDay,  // Renamed from salesByPeriod to match frontend
+      recentOrders,
+      topProducts,
     });
   } catch (error) {
     console.error("Error fetching dashboard stats:", error);
     return res.status(500).json({ 
       error: "Internal server error",
       // Return empty default data structure on error to prevent client-side errors
-      data: {
-        totalSales: 0,
-        totalOrders: 0,
-        newCustomers: 0,
-        salesByPeriod: [],
-        recentOrders: [],
-        orderStatuses: [],
-        topProducts: [],
-      }
+      totalUsers: 0,
+      totalOrders: 0,
+      totalProducts: 0,
+      totalRevenue: 0,
+      salesByDay: [],
+      recentOrders: [],
+      topProducts: [],
     });
   }
 }

@@ -96,20 +96,7 @@ export const createTables = async () => {
       )
     `);
 
-    // Create transactions table (unified syntax)
-    await query(`
-      CREATE TABLE IF NOT EXISTS transactions (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id),
-        reference VARCHAR(255) NOT NULL,
-        amount DECIMAL(10, 2) NOT NULL,
-        status VARCHAR(50) DEFAULT 'pending',
-        metadata TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
+    
     // Create orders table (unified structure and syntax with currency fields)
     await query(`
       CREATE TABLE IF NOT EXISTS orders (
@@ -226,7 +213,6 @@ export const dropTables = async () => {
     await query("DROP TABLE IF EXISTS payment_verification_tokens CASCADE");
     await query("DROP TABLE IF EXISTS order_items CASCADE");
     await query("DROP TABLE IF EXISTS orders CASCADE");
-    await query("DROP TABLE IF EXISTS transactions CASCADE");
     await query("DROP TABLE IF EXISTS cart_items CASCADE");
     await query("DROP TABLE IF EXISTS carts CASCADE");
     await query("DROP TABLE IF EXISTS product_sizes CASCADE");
