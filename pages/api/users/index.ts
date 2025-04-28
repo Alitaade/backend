@@ -15,8 +15,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     // Build the SQL query
     let sqlQuery = `
-      SELECT id, email, first_name, last_name, is_admin, profile_complete, 
-             created_at, updated_at, whatsapp, phone
+      SELECT id, email, first_name, last_name, is_admin, profile_complete,
+              created_at, updated_at, whatsapp, phone
       FROM users
       WHERE 1=1
     `
@@ -42,7 +42,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       paramIndex++
     }
 
-    // Add profile complete filter
+    // Add profile complete filter - Fixed parameter name
     if (profile_complete !== undefined) {
       sqlQuery += ` AND profile_complete = $${paramIndex}`
       queryParams.push(profile_complete === "true")
@@ -83,5 +83,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 }
 
 // Apply admin authentication and CORS middleware
-// Fix your export line
 export default applyMiddleware(requireAdminMiddleware(handler))
