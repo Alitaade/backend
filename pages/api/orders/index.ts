@@ -1,11 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { query } from "../../../database/connection"
 import { createOrder } from "../../../controllers/order-controller"
-import { authenticateUser, requireAdmin  } from "../../../middleware/auth-middleware"
+import { authenticateUser, requireAdmin } from "../../../middleware/auth-middleware"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-
-  
   // Handle CORS preflight request
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -48,14 +46,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
 
       default:
-        
         res.setHeader("Allow", ["GET", "POST", "OPTIONS"])
         return res.status(405).json({ error: "Method not allowed" })
     }
   } catch (error) {
     console.error("Unhandled error in orders API handler:", error)
     if (!res.writableEnded) {
-      
       return res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -148,8 +144,6 @@ async function getOrdersHandler(req: NextApiRequest, res: NextApiResponse) {
     // Calculate pagination metadata
     const totalPages = Math.ceil(total / Number(limit))
 
-   
-
     // Return paginated response
     return res.status(200).json({
       data: formattedOrders,
@@ -160,7 +154,6 @@ async function getOrdersHandler(req: NextApiRequest, res: NextApiResponse) {
     })
   } catch (error) {
     console.error("Error fetching orders:", error)
-    
     return res.status(500).json({ error: "Internal server error" })
   }
 }
