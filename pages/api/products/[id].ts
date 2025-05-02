@@ -8,6 +8,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return getProduct(req, res);
   }
   
+   
   // For all other methods (OPTIONS, PUT, DELETE), apply CORS handling first
   enableCors(req, res, async () => {
     // If it's an OPTIONS request, enableCors already handled it and returned

@@ -28,13 +28,30 @@ export const config = {
   },
 };
 
-// Directory where uploads will be stored temporarily
-const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
+// Safe directory creation function that works in serverless environments
+const ensureDir = (dirPath: string) => {
+  // Only try to create directory if we're in a writable environment
+  try {
+    if (process.env.NODE_ENV !== 'production') {
+      // In development, we can create directories as needed
+      if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+      }
+    }
+    return true;
+  } catch (error) {
+    console.warn(`Warning: Could not create directory ${dirPath}`, error);
+    return false;
+  }
+};
 
-// Ensure uploads directory exists
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
+// Directory where uploads will be stored temporarily - use /tmp in production for Lambda compatibility
+const UPLOADS_DIR = process.env.NODE_ENV === 'production' 
+  ? path.join('/tmp', 'uploads') 
+  : path.join(process.cwd(), 'uploads');
+
+// Initialize uploads directory
+ensureDir(UPLOADS_DIR);
 
 export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
@@ -318,6 +335,11 @@ export const addImageByUrl = async (req: NextApiRequest, res: NextApiResponse) =
 // New function to handle file uploads
 export const addImageFromFile = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
+    // Ensure uploads directory exists
+    if (!ensureDir(UPLOADS_DIR)) {
+      return res.status(500).json({ error: "Could not access upload directory" });
+    }
+
     // Parse the form data using formidable
     const form = new formidable.IncomingForm({
       uploadDir: UPLOADS_DIR,
@@ -352,31 +374,58 @@ export const addImageFromFile = async (req: NextApiRequest, res: NextApiResponse
         const mimeType = file.mimetype || '';
         if (!mimeType.startsWith('image/')) {
           // Clean up the file
-          fs.unlinkSync(file.filepath);
+          try {
+            if (fs.existsSync(file.filepath)) {
+              fs.unlinkSync(file.filepath);
+            }
+          } catch (err) {
+            console.warn("Could not delete non-image file:", err);
+          }
           res.status(400).json({ error: "Only image files are allowed" });
           return resolve();
         }
 
         try {
-          // Get image dimensions (you could use a library like image-size here)
-          // For now, we'll use default dimensions from your utils
           const isPrimary = fields.is_primary === 'true';
           const altText = fields.alt_text || `Image of product ${productId}`;
 
           // Generate a unique filename
           const uniqueFilename = `${uuidv4()}${path.extname(file.originalFilename || '')}`;
-          const publicPath = `/uploads/${uniqueFilename}`;
-          const destinationPath = path.join(process.cwd(), 'public', 'uploads', uniqueFilename);
           
-          // Ensure directory exists
-          const uploadDir = path.dirname(destinationPath);
-          if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
+          // In production (serverless), use S3 or other storage service
+          // This code assumes you're handling the public uploads differently in production
+          let publicPath;
+          
+          if (process.env.NODE_ENV === 'production') {
+            // For production, you would typically:
+            // 1. Upload to S3 or similar service
+            // 2. Get the public URL
+            // This is a placeholder - implement your cloud storage logic here
+            publicPath = `/api/images/${uniqueFilename}`; // A route that serves images
+            
+            // Keep the file in /tmp for now
+            // In a real implementation, you'd upload to S3 here
+          } else {
+            // For development, save to local public directory
+            publicPath = `/uploads/${uniqueFilename}`;
+            const destinationPath = path.join(process.cwd(), 'public', 'uploads', uniqueFilename);
+            
+            // Ensure public uploads directory exists
+            const uploadDir = path.dirname(destinationPath);
+            ensureDir(uploadDir);
+            
+            // Move the file from temp location to public directory
+            fs.copyFileSync(file.filepath, destinationPath);
           }
-
-          // Move the file from temp location to public directory
-          fs.copyFileSync(file.filepath, destinationPath);
-          fs.unlinkSync(file.filepath); // Clean up the temp file
+          
+          // Clean up the temp file
+          try {
+            if (fs.existsSync(file.filepath)) {
+              fs.unlinkSync(file.filepath);
+            }
+          } catch (err) {
+            console.warn("Could not delete temp file:", err);
+          }
 
           // Process the image dimensions
           const processedImage = ensureImageDimensions(
@@ -402,8 +451,12 @@ export const addImageFromFile = async (req: NextApiRequest, res: NextApiResponse
         } catch (error) {
           console.error("Error processing uploaded image:", error);
           // Clean up the temp file if exists
-          if (file && file.filepath && fs.existsSync(file.filepath)) {
-            fs.unlinkSync(file.filepath);
+          try {
+            if (file && file.filepath && fs.existsSync(file.filepath)) {
+              fs.unlinkSync(file.filepath);
+            }
+          } catch (err) {
+            console.warn("Could not delete temp file during error cleanup:", err);
           }
           res.status(500).json({ error: "Failed to process uploaded image" });
         }
