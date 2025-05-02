@@ -1,9 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { setPrimaryImage } from "../../../../../../controllers/product-controller"
-import { requireAdmin } from "../../../../../../middleware/auth-middleware"
+import { requireAdmin, enableCors } from "../../../../../../middleware/auth-middleware"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  switch (req.method) {
+    enableCors(req, res, async () => {
+     switch (req.method) {
     case "PATCH":
       // Admin only - set an image as primary
       return new Promise<void>((resolve) => {
@@ -15,4 +16,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     default:
       return res.status(405).json({ error: "Method not allowed" })
   }
+});
 }

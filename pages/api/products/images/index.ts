@@ -1,8 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { addImage } from "../../../../controllers/product-controller"
-import { requireAdmin } from "../../../../middleware/auth-middleware"
+import { requireAdmin, enableCors } from "../../../../middleware/auth-middleware"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  enableCors(req, res, async () => {
   switch (req.method) {
     case "POST":
       // Admin only - add an image to a product
@@ -15,5 +16,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     default:
       return res.status(405).json({ error: "Method not allowed" })
   }
+});
 }
 
