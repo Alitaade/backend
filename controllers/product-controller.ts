@@ -340,12 +340,14 @@ export const addImageFromFile = async (req: NextApiRequest, res: NextApiResponse
       return res.status(500).json({ error: "Could not access upload directory" });
     }
 
-    // Parse the form data using formidable
-    const form = new formidable.IncomingForm({
+    // Parse the form data using formidable - fixed for newer formidable versions
+    const options = {
       uploadDir: UPLOADS_DIR,
       keepExtensions: true,
       maxFileSize: 10 * 1024 * 1024, // 10MB limit
-    });
+    };
+    
+    const form = formidable(options);
 
     return new Promise<void>((resolve) => {
       form.parse(req, async (err, fields, files) => {
@@ -469,7 +471,6 @@ export const addImageFromFile = async (req: NextApiRequest, res: NextApiResponse
     return res.status(500).json({ error: "Internal server error" });
   }
 };
-
 export const searchProducts = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     const { q } = req.query
@@ -525,7 +526,6 @@ export const addSize = async (req: NextApiRequest, res: NextApiResponse) => {
   }
 }
 // controllers/product-controller.ts - Add this new function
-
 export const addMultipleImages = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     // Ensure uploads directory exists
@@ -538,13 +538,15 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
       return res.status(400).json({ error: "Invalid product ID" });
     }
 
-    // Parse the form data using formidable
-    const form = new formidable.IncomingForm({
+    // Create formidable form for parsing - fixed for newer formidable versions
+    const options = {
       uploadDir: UPLOADS_DIR,
       keepExtensions: true,
       maxFileSize: 10 * 1024 * 1024, // 10MB limit
       multiples: true, // Allow multiple files
-    });
+    };
+    
+    const form = formidable(options);
 
     return new Promise<void>((resolve) => {
       form.parse(req, async (err, fields, files) => {
@@ -698,7 +700,6 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
     return res.status(500).json({ error: "Internal server error" });
   }
 };
-
 // Export all functions for use in API routes
 export {
   getAllProducts,
