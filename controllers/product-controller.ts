@@ -471,6 +471,7 @@ export const addImageFromFile = async (req: NextApiRequest, res: NextApiResponse
     return res.status(500).json({ error: "Internal server error" });
   }
 };
+
 export const searchProducts = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     const { q } = req.query
