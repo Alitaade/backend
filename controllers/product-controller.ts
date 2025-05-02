@@ -524,6 +524,180 @@ export const addSize = async (req: NextApiRequest, res: NextApiResponse) => {
     return res.status(500).json({ error: "Internal server error" })
   }
 }
+// controllers/product-controller.ts - Add this new function
+
+export const addMultipleImages = async (req: NextApiRequest, res: NextApiResponse) => {
+  try {
+    // Ensure uploads directory exists
+    if (!ensureDir(UPLOADS_DIR)) {
+      return res.status(500).json({ error: "Could not access upload directory" });
+    }
+
+    const productId = Number.parseInt(req.query.id as string);
+    if (isNaN(productId)) {
+      return res.status(400).json({ error: "Invalid product ID" });
+    }
+
+    // Parse the form data using formidable
+    const form = new formidable.IncomingForm({
+      uploadDir: UPLOADS_DIR,
+      keepExtensions: true,
+      maxFileSize: 10 * 1024 * 1024, // 10MB limit
+      multiples: true, // Allow multiple files
+    });
+
+    return new Promise<void>((resolve) => {
+      form.parse(req, async (err, fields, files) => {
+        if (err) {
+          console.error("Error parsing form:", err);
+          res.status(500).json({ error: "Error parsing form data" });
+          return resolve();
+        }
+
+        const results = {
+          uploadedFiles: [],
+          uploadedUrls: [],
+          errors: []
+        };
+
+        // Process file uploads first
+        const fileArray = files.images;
+        if (fileArray) {
+          const imageFiles = Array.isArray(fileArray) ? fileArray : [fileArray];
+          
+          for (const file of imageFiles) {
+            try {
+              // Verify file is an image
+              const mimeType = file.mimetype || '';
+              if (!mimeType.startsWith('image/')) {
+                // Skip non-image files
+                results.errors.push(`File ${file.originalFilename} is not an image`);
+                continue;
+              }
+
+              const isPrimary = fields.is_primary === 'true'; // Only first image will be primary if true
+              const altText = fields.alt_text || `Image of product ${productId}`;
+
+              // Generate a unique filename
+              const uniqueFilename = `${uuidv4()}${path.extname(file.originalFilename || '')}`;
+              
+              // Set up file paths based on environment
+              let publicPath;
+              
+              if (process.env.NODE_ENV === 'production') {
+                publicPath = `/api/images/${uniqueFilename}`; // Production path placeholder
+              } else {
+                // For development, save to local public directory
+                publicPath = `/uploads/${uniqueFilename}`;
+                const destinationPath = path.join(process.cwd(), 'public', 'uploads', uniqueFilename);
+                
+                // Ensure public uploads directory exists
+                const uploadDir = path.dirname(destinationPath);
+                ensureDir(uploadDir);
+                
+                // Move the file from temp location to public directory
+                fs.copyFileSync(file.filepath, destinationPath);
+              }
+              
+              // Clean up the temp file
+              try {
+                if (fs.existsSync(file.filepath)) {
+                  fs.unlinkSync(file.filepath);
+                }
+              } catch (cleanupErr) {
+                console.warn("Could not delete temp file:", cleanupErr);
+              }
+
+              // Process the image dimensions
+              const processedImage = ensureImageDimensions(
+                publicPath,
+                undefined,
+                undefined
+              );
+
+              // Save to database
+              const image = await addProductImage(
+                productId,
+                publicPath,
+                isPrimary && results.uploadedFiles.length === 0 && results.uploadedUrls.length === 0, // Only first image is primary
+                processedImage.width,
+                processedImage.height,
+                altText as string
+              );
+
+              results.uploadedFiles.push(image);
+            } catch (fileError) {
+              console.error("Error processing uploaded file:", fileError);
+              results.errors.push(`Failed to process file ${file.originalFilename}: ${fileError.message}`);
+            }
+          }
+        }
+
+        // Process image URLs if provided in the fields
+        try {
+          const imageUrls = fields.image_urls;
+          if (imageUrls) {
+            // Convert to array if it's a string
+            const urls = typeof imageUrls === 'string' 
+              ? JSON.parse(imageUrls) 
+              : (Array.isArray(imageUrls) ? imageUrls : [imageUrls]);
+            
+            for (let i = 0; i < urls.length; i++) {
+              const url = urls[i];
+              if (!url) continue;
+
+              const isPrimary = fields.is_primary === 'true' && 
+                results.uploadedFiles.length === 0 && 
+                results.uploadedUrls.length === 0;
+              const altText = fields.alt_text || `Image of product ${productId}`;
+
+              // Process the image to ensure it has dimensions
+              const processedImage = ensureImageDimensions(url, undefined, undefined);
+
+              const image = await addProductImageByUrl(
+                productId,
+                processedImage.url,
+                isPrimary,
+                processedImage.width,
+                processedImage.height,
+                altText as string
+              );
+
+              results.uploadedUrls.push(image);
+            }
+          }
+        } catch (urlError) {
+          console.error("Error processing image URLs:", urlError);
+          results.errors.push(`Failed to process image URLs: ${urlError.message}`);
+        }
+
+        // Return results
+        if (results.uploadedFiles.length === 0 && results.uploadedUrls.length === 0) {
+          if (results.errors.length > 0) {
+            res.status(400).json({ 
+              error: "Failed to upload any images", 
+              details: results.errors 
+            });
+          } else {
+            res.status(400).json({ error: "No images provided" });
+          }
+        } else {
+          res.status(201).json({ 
+            message: "Images uploaded successfully", 
+            uploadedFiles: results.uploadedFiles,
+            uploadedUrls: results.uploadedUrls,
+            errors: results.errors.length > 0 ? results.errors : undefined
+          });
+        }
+
+        return resolve();
+      });
+    });
+  } catch (error) {
+    console.error("Error in multiple image upload:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
 
 // Export all functions for use in API routes
 export {
