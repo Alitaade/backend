@@ -16,6 +16,25 @@ import {
 } from "../models/product"
 import { ensureImageDimensions } from "../utils/image-utils"
 import { getAllCategories } from "../models/category"
+import formidable from 'formidable'
+import path from 'path'
+import fs from 'fs'
+import { v4 as uuidv4 } from 'uuid'
+
+// Config for file upload endpoints to disable body parsing
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+// Directory where uploads will be stored temporarily
+const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
+
+// Ensure uploads directory exists
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
 
 export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
@@ -295,6 +314,108 @@ export const addImageByUrl = async (req: NextApiRequest, res: NextApiResponse) =
     return res.status(500).json({ error: "Internal server error" })
   }
 }
+
+// New function to handle file uploads
+export const addImageFromFile = async (req: NextApiRequest, res: NextApiResponse) => {
+  try {
+    // Parse the form data using formidable
+    const form = new formidable.IncomingForm({
+      uploadDir: UPLOADS_DIR,
+      keepExtensions: true,
+      maxFileSize: 10 * 1024 * 1024, // 10MB limit
+    });
+
+    return new Promise<void>((resolve) => {
+      form.parse(req, async (err, fields, files) => {
+        if (err) {
+          console.error("Error parsing form:", err);
+          res.status(500).json({ error: "Error parsing form data" });
+          return resolve();
+        }
+
+        const productId = Number.parseInt(req.query.id as string);
+        if (isNaN(productId)) {
+          res.status(400).json({ error: "Invalid product ID" });
+          return resolve();
+        }
+
+        // Get file from files object (formidable v4 returns arrays)
+        const fileArray = files.image;
+        const file = Array.isArray(fileArray) ? fileArray[0] : fileArray;
+
+        if (!file) {
+          res.status(400).json({ error: "No image file provided" });
+          return resolve();
+        }
+
+        // Verify file is an image
+        const mimeType = file.mimetype || '';
+        if (!mimeType.startsWith('image/')) {
+          // Clean up the file
+          fs.unlinkSync(file.filepath);
+          res.status(400).json({ error: "Only image files are allowed" });
+          return resolve();
+        }
+
+        try {
+          // Get image dimensions (you could use a library like image-size here)
+          // For now, we'll use default dimensions from your utils
+          const isPrimary = fields.is_primary === 'true';
+          const altText = fields.alt_text || `Image of product ${productId}`;
+
+          // Generate a unique filename
+          const uniqueFilename = `${uuidv4()}${path.extname(file.originalFilename || '')}`;
+          const publicPath = `/uploads/${uniqueFilename}`;
+          const destinationPath = path.join(process.cwd(), 'public', 'uploads', uniqueFilename);
+          
+          // Ensure directory exists
+          const uploadDir = path.dirname(destinationPath);
+          if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+          }
+
+          // Move the file from temp location to public directory
+          fs.copyFileSync(file.filepath, destinationPath);
+          fs.unlinkSync(file.filepath); // Clean up the temp file
+
+          // Process the image dimensions
+          const processedImage = ensureImageDimensions(
+            publicPath,
+            fields.width ? Number.parseInt(fields.width as string) : undefined,
+            fields.height ? Number.parseInt(fields.height as string) : undefined
+          );
+
+          // Save to database
+          const image = await addProductImage(
+            productId,
+            publicPath,
+            isPrimary,
+            processedImage.width,
+            processedImage.height,
+            altText as string
+          );
+
+          res.status(201).json({ 
+            message: "Image uploaded successfully", 
+            image 
+          });
+        } catch (error) {
+          console.error("Error processing uploaded image:", error);
+          // Clean up the temp file if exists
+          if (file && file.filepath && fs.existsSync(file.filepath)) {
+            fs.unlinkSync(file.filepath);
+          }
+          res.status(500).json({ error: "Failed to process uploaded image" });
+        }
+
+        return resolve();
+      });
+    });
+  } catch (error) {
+    console.error("Error in file upload:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
 
 export const searchProducts = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
