@@ -85,12 +85,29 @@ export const authenticateUser = (
 
 /**
  * Middleware to check if authenticated user is an admin
+ * Now with CORS support and proper promise handling
  */
 export const requireAdmin = (
   req: AuthenticatedRequest,
   res: NextApiResponse,
   next: () => void
 ) => {
+  // Handle OPTIONS request for CORS preflight
+  if (req.method === 'OPTIONS') {
+// Set CORS headers for all other requests
+  res.setHeader('Access-Control-Allow-Origin', 'https://admin-frontends.vercel.app');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token, X-API-Key');
+  
+    res.status(200).end();
+    return;
+  }
+  
+  // Set CORS headers for all other requests
+  res.setHeader('Access-Control-Allow-Origin', 'https://admin-frontends.vercel.app');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token, X-API-Key');
+  
   try {
     // First authenticate the user
     authenticateUser(req, res, () => {
@@ -104,7 +121,9 @@ export const requireAdmin = (
     });
   } catch (error) {
     console.error("Admin authorization error:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    if (!res.writableEnded) {
+      return res.status(500).json({ error: "Internal server error" });
+    }
   }
 };
 // Add this to your auth-middleware.ts file
