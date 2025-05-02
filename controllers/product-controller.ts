@@ -288,7 +288,7 @@ export const addImageByUrl = async (req: NextApiRequest, res: NextApiResponse) =
     const image = await addProductImageByUrl(
       Number.parseInt(id as string),
       processedImage.url,
-      is_primary,
+      Boolean(is_primary),
       processedImage.width,
       processedImage.height,
       alt_text as string,

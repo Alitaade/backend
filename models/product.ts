@@ -363,3 +363,151 @@ export const deleteProductSize = async (id: number): Promise<boolean> => {
   }
 }
 
+// Add these functions to your product model file
+
+// Set product image as primary
+export const setProductImageAsPrimary = async (productId: number, imageId: number): Promise<boolean> => {
+  try {
+    // Start a transaction
+    await query("BEGIN")
+    
+    // Check if the image exists and belongs to the product
+    const imageCheck = await query(
+      "SELECT id FROM product_images WHERE id = $1 AND product_id = $2",
+      [imageId, productId]
+    )
+    
+    if (imageCheck.rows.length === 0) {
+      await query("ROLLBACK")
+      return false
+    }
+    
+    // Set all images of this product to non-primary
+    await query(
+      "UPDATE product_images SET is_primary = false WHERE product_id = $1",
+      [productId]
+    )
+    
+    // Set the specified image as primary
+    await query(
+      "UPDATE product_images SET is_primary = true WHERE id = $1",
+      [imageId]
+    )
+    
+    // Commit the transaction
+    await query("COMMIT")
+    
+    return true
+  } catch (error) {
+    await query("ROLLBACK")
+    console.error("Error setting product image as primary:", error)
+    throw error
+  }
+}
+
+// Add product image by URL (similar to addProductImage but with different parameter order)
+export const addProductImageByUrl = async (
+  product_id: number,
+  image_url: string,
+  is_primary: boolean,
+  width?: number,
+  height?: number,
+  alt_text?: string,
+): Promise<ProductImage> => {
+  try {
+    // If this is a primary image, update all other images to non-primary
+    if (is_primary) {
+      await query("UPDATE product_images SET is_primary = false WHERE product_id = $1", [product_id])
+    }
+
+    const result = await query(
+      "INSERT INTO product_images (product_id, image_url, is_primary, width, height, alt_text) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+      [product_id, image_url, is_primary, width || null, height || null, alt_text || null],
+    )
+
+    return result.rows[0]
+  } catch (error) {
+    console.error("Error adding product image by URL:", error)
+    throw error
+  }
+}
+
+// Search products by query
+export const searchProductsByQuery = async (searchQuery: string): Promise<ProductWithDetails[]> => {
+  try {
+    const searchQueryText = `%${searchQuery}%`
+    
+    const productsResult = await query(
+      `
+      SELECT p.*, c.name as category_name
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+      WHERE 
+        p.name ILIKE $1 OR
+        p.description ILIKE $1
+      ORDER BY p.created_at DESC
+      LIMIT 50
+      `,
+      [searchQueryText]
+    )
+    
+    const products = productsResult.rows
+
+    // Get images and sizes for each product
+    const productsWithDetails: ProductWithDetails[] = []
+
+    for (const product of products) {
+      const imagesResult = await query(
+        "SELECT * FROM product_images WHERE product_id = $1 ORDER BY is_primary DESC", 
+        [product.id]
+      )
+
+      const sizesResult = await query(
+        "SELECT * FROM product_sizes WHERE product_id = $1", 
+        [product.id]
+      )
+
+      productsWithDetails.push({
+        ...product,
+        images: imagesResult.rows,
+        sizes: sizesResult.rows,
+      })
+    }
+
+    return productsWithDetails
+  } catch (error) {
+    console.error("Error searching products:", error)
+    throw error
+  }
+}
+
+// Add a product size
+export const addProductSize = async (
+  product_id: number,
+  size: string,
+  stock_quantity: number
+): Promise<ProductSize> => {
+  try {
+    // Check if the size already exists for this product
+    const existingSize = await query(
+      "SELECT * FROM product_sizes WHERE product_id = $1 AND size = $2",
+      [product_id, size]
+    )
+
+    if (existingSize.rows.length > 0) {
+      throw new Error("Size already exists for this product")
+    }
+
+    // Insert new size
+    const result = await query(
+      "INSERT INTO product_sizes (product_id, size, stock_quantity) VALUES ($1, $2, $3) RETURNING *",
+      [product_id, size, stock_quantity]
+    )
+    
+    return result.rows[0]
+  } catch (error) {
+    console.error("Error adding product size:", error)
+    throw error
+  }
+}
+
