@@ -10,35 +10,37 @@ export const DEFAULT_IMAGE_DIMENSIONS = {
   carousel: { width: 1200, height: 1600 },
 }
 
-// Function to validate image URL
+// Function to validate image URL - modified to accept any URL and local files
 export const validateImageUrl = (url: string): boolean => {
+  // Accept local file uploads (which will be represented as relative paths)
+  if (url.startsWith('/') || url.startsWith('./')) {
+    return true;
+  }
+
   try {
-    const parsedUrl = new URL(url)
-    const protocol = parsedUrl.protocol.toLowerCase()
+    const parsedUrl = new URL(url);
+    const protocol = parsedUrl.protocol.toLowerCase();
 
     // Only allow http and https protocols
     if (protocol !== "http:" && protocol !== "https:") {
-      return false
+      return false;
     }
 
-    // Check if the URL has a valid image extension or is from a known image hosting service
-    const validExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"]
-    const path = parsedUrl.pathname.toLowerCase()
-    const validImageHosts = [
-      "unsplash.com",
-      "images.unsplash.com",
-      "cloudinary.com",
-      "res.cloudinary.com",
-      "imgur.com",
-      "i.imgur.com",
-    ]
-
-    const isValidHost = validImageHosts.some((host) => parsedUrl.hostname.includes(host))
-    const hasValidExtension = validExtensions.some((ext) => path.endsWith(ext))
-
-    return isValidHost || hasValidExtension
+    // Check if the URL has a valid image extension
+    const validExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".avif", ".bmp", ".tiff"];
+    const path = parsedUrl.pathname.toLowerCase();
+    
+    // Accept any domain but still verify image extensions
+    return validExtensions.some(ext => path.endsWith(ext)) || 
+           // Also allow URLs with "image" in the path or containing "image" in query params
+           path.includes('image') || 
+           parsedUrl.search.toLowerCase().includes('image');
   } catch (error) {
-    return false
+    // If URL parsing fails but the string looks like a base64 data URL for an image
+    if (url.startsWith('data:image/')) {
+      return true;
+    }
+    return false;
   }
 }
 
@@ -62,45 +64,56 @@ export const getOptimizedImageUrl = (
   originalUrl: string,
   size: "thumbnail" | "small" | "medium" | "large" | "original" = "medium",
 ): string => {
-  // Handle Unsplash images
-  if (originalUrl.includes("unsplash.com")) {
-    // Extract any existing query parameters
-    const [baseUrl, existingQuery] = originalUrl.split("?")
-    const params = new URLSearchParams(existingQuery || "")
-
-    // Set dimensions based on size
-    switch (size) {
-      case "thumbnail":
-        params.set("w", DEFAULT_IMAGE_DIMENSIONS.thumbnail.width.toString())
-        params.set("h", DEFAULT_IMAGE_DIMENSIONS.thumbnail.height.toString())
-        break
-      case "small":
-        params.set("w", "600")
-        break
-      case "medium":
-        params.set("w", "1200")
-        break
-      case "large":
-        params.set("w", "1800")
-        break
-      case "original":
-        // Don't set width/height for original
-        break
-    }
-
-    // Always ensure good quality and format
-    if (size !== "original") {
-      params.set("q", "80")
-      params.set("auto", "format")
-      params.set("fit", "crop")
-    }
-
-    return `${baseUrl}?${params.toString()}`
+  // Handle local files - don't try to optimize them
+  if (originalUrl.startsWith('/') || originalUrl.startsWith('./') || originalUrl.startsWith('data:')) {
+    return originalUrl;
   }
 
-  // For other image sources, just return the original URL
-  // In a real application, you would implement similar logic for other image providers
-  return originalUrl
+  try {
+    const parsedUrl = new URL(originalUrl);
+    
+    // Handle Unsplash images
+    if (originalUrl.includes("unsplash.com")) {
+      // Extract any existing query parameters
+      const [baseUrl, existingQuery] = originalUrl.split("?")
+      const params = new URLSearchParams(existingQuery || "")
+
+      // Set dimensions based on size
+      switch (size) {
+        case "thumbnail":
+          params.set("w", DEFAULT_IMAGE_DIMENSIONS.thumbnail.width.toString())
+          params.set("h", DEFAULT_IMAGE_DIMENSIONS.thumbnail.height.toString())
+          break
+        case "small":
+          params.set("w", "600")
+          break
+        case "medium":
+          params.set("w", "1200")
+          break
+        case "large":
+          params.set("w", "1800")
+          break
+        case "original":
+          // Don't set width/height for original
+          break
+      }
+
+      // Always ensure good quality and format
+      if (size !== "original") {
+        params.set("q", "80")
+        params.set("auto", "format")
+        params.set("fit", "crop")
+      }
+
+      return `${baseUrl}?${params.toString()}`
+    }
+    
+    // For other image sources, just return the original URL
+    return originalUrl;
+  } catch (error) {
+    // If URL parsing fails, return the original
+    return originalUrl;
+  }
 }
 
 // Function to prepare images for carousel display
@@ -145,7 +158,7 @@ export const ensureImageDimensions = (
   const dimensions = DEFAULT_IMAGE_DIMENSIONS.carousel
 
   // Add dimensions to URL if it's an Unsplash image
-  if (imageUrl.includes("unsplash.com")) {
+  if (imageUrl && imageUrl.includes("unsplash.com")) {
     return {
       url: getOptimizedImageUrl(imageUrl, "medium"),
       width: dimensions.width,
@@ -160,4 +173,3 @@ export const ensureImageDimensions = (
     height: dimensions.height,
   }
 }
-

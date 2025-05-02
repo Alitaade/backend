@@ -240,10 +240,6 @@ export const deleteSize = async (req: NextApiRequest, res: NextApiResponse) => {
   }
 }
 
-// Add these functions to your product-controller.ts file
-
-
-// Set an image as primary
 export const setPrimaryImage = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     const { id, imageId } = req.query
@@ -268,7 +264,6 @@ export const setPrimaryImage = async (req: NextApiRequest, res: NextApiResponse)
   }
 }
 
-// Add an image by URL
 export const addImageByUrl = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     const { id } = req.query
@@ -288,7 +283,7 @@ export const addImageByUrl = async (req: NextApiRequest, res: NextApiResponse) =
     const image = await addProductImageByUrl(
       Number.parseInt(id as string),
       processedImage.url,
-      Boolean(is_primary),
+      is_primary,
       processedImage.width,
       processedImage.height,
       alt_text as string,
@@ -301,7 +296,6 @@ export const addImageByUrl = async (req: NextApiRequest, res: NextApiResponse) =
   }
 }
 
-// Search products
 export const searchProducts = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     const { q } = req.query
@@ -319,7 +313,6 @@ export const searchProducts = async (req: NextApiRequest, res: NextApiResponse) 
   }
 }
 
-// Get all categories
 export const getCategories = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     const categories = await getAllCategories()
@@ -331,7 +324,6 @@ export const getCategories = async (req: NextApiRequest, res: NextApiResponse) =
   }
 }
 
-// Add a size to a product
 export const addSize = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     const { id } = req.query
@@ -349,7 +341,29 @@ export const addSize = async (req: NextApiRequest, res: NextApiResponse) => {
 
     return res.status(201).json({ message: "Size added successfully", size: productSize })
   } catch (error) {
+    // Handle specific error for duplicate size
+    if (error instanceof Error && error.message === "Size already exists for this product") {
+      return res.status(400).json({ error: error.message })
+    }
+    
     console.error("Error adding product size:", error)
     return res.status(500).json({ error: "Internal server error" })
   }
+}
+
+// Export all functions for use in API routes
+export {
+  getAllProducts,
+  getProductById,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  addProductImage,
+  deleteProductImage,
+  updateProductSize,
+  deleteProductSize,
+  setProductImageAsPrimary,
+  addProductImageByUrl,
+  searchProductsByQuery,
+  addNewProductSize,
 }

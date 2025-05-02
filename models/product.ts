@@ -26,7 +26,6 @@ export interface ProductSize {
   stock_quantity: number
 }
 
-// Update the ProductImage interface to include width and height properties
 export interface ProductImage {
   id: number
   product_id: number
@@ -127,7 +126,6 @@ export const getProductById = async (id: number): Promise<ProductWithDetails | n
   }
 }
 
-// Update the createProduct function to handle image dimensions
 export const createProduct = async (
   productData: ProductInput,
   sizes?: { size: string; stock_quantity: number }[],
@@ -283,7 +281,6 @@ export const deleteProduct = async (id: number): Promise<boolean> => {
   }
 }
 
-// Update the addProductImage function to include width, height, and alt_text
 export const addProductImage = async (
   product_id: number,
   image_url: string,
@@ -363,9 +360,6 @@ export const deleteProductSize = async (id: number): Promise<boolean> => {
   }
 }
 
-// Add these functions to your product model file
-
-// Set product image as primary
 export const setProductImageAsPrimary = async (productId: number, imageId: number): Promise<boolean> => {
   try {
     // Start a transaction
@@ -405,7 +399,6 @@ export const setProductImageAsPrimary = async (productId: number, imageId: numbe
   }
 }
 
-// Add product image by URL (similar to addProductImage but with different parameter order)
 export const addProductImageByUrl = async (
   product_id: number,
   image_url: string,
@@ -432,7 +425,6 @@ export const addProductImageByUrl = async (
   }
 }
 
-// Search products by query
 export const searchProductsByQuery = async (searchQuery: string): Promise<ProductWithDetails[]> => {
   try {
     const searchQueryText = `%${searchQuery}%`
@@ -481,7 +473,6 @@ export const searchProductsByQuery = async (searchQuery: string): Promise<Produc
   }
 }
 
-// Add a product size
 export const addProductSize = async (
   product_id: number,
   size: string,
@@ -510,4 +501,3 @@ export const addProductSize = async (
     throw error
   }
 }
-
