@@ -5,7 +5,7 @@ import { requireAdmin } from "../../../middleware/auth-middleware"
 
 // CORS middleware
 function enableCors(req: NextApiRequest, res: NextApiResponse, next: () => void) {
-  res.setHeader('Access-Control-Allow-Origin', 'https://admin-frontends.vercel.app');
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token, X-API-Key');
 
