@@ -5,7 +5,7 @@ import { requireAdmin } from "../../../middleware/auth-middleware"
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   switch (req.method) {
     case "GET":
-      // Public endpoint - get a product by ID'S
+      // Public endpoint - get a product by ID
       return getProduct(req, res)
 
     case "PUT":

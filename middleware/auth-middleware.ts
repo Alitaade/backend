@@ -28,22 +28,25 @@ interface AuthenticatedRequest extends NextApiRequest {
 }
 
 /**
- * CORS middleware
+ * CORS middleware - Enhanced to properly handle OPTIONS requests
  */
 export const enableCors = (
   req: NextApiRequest,
   res: NextApiResponse,
   next: () => void
 ) => {
+  // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', 'https://admin-frontends.vercel.app');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token, X-API-Key');
   
+  // Handle OPTIONS method
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
   
+  // Continue to next middleware for non-OPTIONS requests
   next();
 };
 
@@ -56,6 +59,11 @@ export const authenticateUser = (
   next: () => void
 ) => {
   try {
+    // Skip authentication for OPTIONS requests if they happen to reach here
+    if (req.method === 'OPTIONS') {
+      return next();
+    }
+    
     // Get token from Authorization header
     const authHeader = req.headers.authorization;
     console.log("Auth header:", authHeader);
@@ -112,8 +120,13 @@ export const requireAdmin = (
   next: () => void
 ) => {
   try {
-    // First enable CORS
+    // First enable CORS and handle OPTIONS
     enableCors(req, res, () => {
+      // Skip authentication for OPTIONS requests
+      if (req.method === 'OPTIONS') {
+        return;
+      }
+      
       // Then authenticate the user
       authenticateUser(req, res, () => {
         // Check if user is admin
@@ -139,10 +152,53 @@ export function authMiddleware(
     // Create a "next" function that calls the handler
     const next = () => handler(req, res);
 
-    // Apply the authentication middleware with CORS
-    enableCors(req, res, () => {
-      authenticateUser(req, res, next);
-    });
+    // Apply authentication middleware without CORS
+    // Get token from Authorization header
+    try {
+      const authHeader = req.headers.authorization;
+      console.log("Auth header:", authHeader);
+
+      if (!authHeader) {
+        console.log("No Authorization header found");
+        return res.status(401).json({ error: "Authorization header missing" });
+      }
+
+      if (!authHeader.startsWith("Bearer ")) {
+        console.log("Invalid Authorization header format");
+        return res.status(401).json({ error: "Invalid authorization format" });
+      }
+
+      const token = authHeader.split(" ")[1];
+      if (!token) {
+        console.log("Token is empty");
+        return res.status(401).json({ error: "Invalid token format" });
+      }
+
+      try {
+        // Verify token
+        //@ts-ignore
+        const decoded = jwt.verify(token, JWT_SECRET) as DecodedToken;
+        console.log("Token decoded successfully:", decoded);
+
+        // Add user info to request object
+        req.user = {
+          id: decoded.userId,
+          email: decoded.email,
+          is_admin: decoded.isAdmin,
+        };
+
+        console.log("User attached to request:", req.user);
+
+        // Continue to the handler
+        next();
+      } catch (jwtError) {
+        console.error("JWT verification error:", jwtError);
+        return res.status(401).json({ error: "Invalid or expired token" });
+      }
+    } catch (error) {
+      console.error("Authentication middleware error:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
   };
 }
 
@@ -150,11 +206,15 @@ export function authMiddleware(
 export function requireAdminMiddleware(
   handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void
 ) {
-  return (req: NextApiRequest, res: NextApiResponse) => {
+  return (req: AuthenticatedRequest, res: NextApiResponse) => {
     // Apply CORS first
     enableCors(req, res, () => {
+      // Skip authentication for OPTIONS requests and just return 200 OK
+      if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+      }
+      
       // Then apply admin authorization
-      // Assuming requireAdmin expects an AuthenticatedRequest
       requireAdmin(req as AuthenticatedRequest, res, () => {
         // Finally call the handler
         handler(req, res);
