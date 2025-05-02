@@ -28,6 +28,26 @@ interface AuthenticatedRequest extends NextApiRequest {
 }
 
 /**
+ * CORS middleware
+ */
+export const enableCors = (
+  req: NextApiRequest,
+  res: NextApiResponse,
+  next: () => void
+) => {
+  res.setHeader('Access-Control-Allow-Origin', 'https://admin-frontends.vercel.app');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token, X-API-Key');
+  
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+  
+  next();
+};
+
+/**
  * Middleware to authenticate user from JWT token
  */
 export const authenticateUser = (
@@ -85,48 +105,33 @@ export const authenticateUser = (
 
 /**
  * Middleware to check if authenticated user is an admin
- * Now with CORS support and proper promise handling
  */
 export const requireAdmin = (
   req: AuthenticatedRequest,
   res: NextApiResponse,
   next: () => void
 ) => {
-  // Handle OPTIONS request for CORS preflight
-  if (req.method === 'OPTIONS') {
-// Set CORS headers for all other requests
-  res.setHeader('Access-Control-Allow-Origin', 'https://admin-frontends.vercel.app');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token, X-API-Key');
-  
-    res.status(200).end();
-    return;
-  }
-  
-  // Set CORS headers for all other requests
-  res.setHeader('Access-Control-Allow-Origin', 'https://admin-frontends.vercel.app');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token, X-API-Key');
-  
   try {
-    // First authenticate the user
-    authenticateUser(req, res, () => {
-      // Check if user is admin
-      if (!req.user?.is_admin) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
+    // First enable CORS
+    enableCors(req, res, () => {
+      // Then authenticate the user
+      authenticateUser(req, res, () => {
+        // Check if user is admin
+        if (!req.user?.is_admin) {
+          return res.status(403).json({ error: "Admin access required" });
+        }
 
-      // Continue to the next middleware or handler
-      next();
+        // Continue to the next middleware or handler
+        next();
+      });
     });
   } catch (error) {
     console.error("Admin authorization error:", error);
-    if (!res.writableEnded) {
-      return res.status(500).json({ error: "Internal server error" });
-    }
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
-// Add this to your auth-middleware.ts file
+
+// Higher-order middleware function for authentication
 export function authMiddleware(
   handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void
 ) {
@@ -134,11 +139,13 @@ export function authMiddleware(
     // Create a "next" function that calls the handler
     const next = () => handler(req, res);
 
-    // Apply the authentication middleware
-    authenticateUser(req, res, next);
+  
+      authenticateUser(req, res, next);
+    
   };
 }
-// Add this to your auth-middleware.ts file
+
+// Higher-order middleware function for admin authorization
 export function requireAdminMiddleware(
   handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void
 ) {
@@ -147,6 +154,10 @@ export function requireAdminMiddleware(
     const next = () => handler(req, res);
 
     // Apply the admin authorization middleware
+    // Note: requireAdmin already handles CORS internally with this sequence:
+    // 1. enableCors
+    // 2. authenticateUser
+    // 3. admin check
     requireAdmin(req, res, next);
   };
 }
