@@ -45,7 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return await getProducts(req, res)
     }
 
-    // Fallback for unsupported methods
+    // Fallback for unsupported methodssss
     res.setHeader("Allow", ["GET", "POST", "OPTIONS"])
     return res.status(405).json({ error: "Method not allowed" })
 
