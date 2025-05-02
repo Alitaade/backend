@@ -36,7 +36,7 @@ export const enableCors = (
   next: () => void
 ) => {
   res.setHeader('Access-Control-Allow-Origin', 'https://admin-frontends.vercel.app');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token, X-API-Key');
   
   if (req.method === 'OPTIONS') {
@@ -139,9 +139,10 @@ export function authMiddleware(
     // Create a "next" function that calls the handler
     const next = () => handler(req, res);
 
-  
+    // Apply the authentication middleware with CORS
+    enableCors(req, res, () => {
       authenticateUser(req, res, next);
-    
+    });
   };
 }
 
@@ -149,15 +150,15 @@ export function authMiddleware(
 export function requireAdminMiddleware(
   handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void
 ) {
-  return (req: AuthenticatedRequest, res: NextApiResponse) => {
-    // Create a "next" function that calls the handler
-    const next = () => handler(req, res);
-
-    // Apply the admin authorization middleware
-    // Note: requireAdmin already handles CORS internally with this sequence:
-    // 1. enableCors
-    // 2. authenticateUser
-    // 3. admin check
-    requireAdmin(req, res, next);
+  return (req: NextApiRequest, res: NextApiResponse) => {
+    // Apply CORS first
+    enableCors(req, res, () => {
+      // Then apply admin authorization
+      // Assuming requireAdmin expects an AuthenticatedRequest
+      requireAdmin(req as AuthenticatedRequest, res, () => {
+        // Finally call the handler
+        handler(req, res);
+      });
+    });
   };
 }
