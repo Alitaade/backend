@@ -9,8 +9,13 @@ import {
   deleteProductImage,
   updateProductSize,
   deleteProductSize,
+  setProductImageAsPrimary,
+  addProductImageByUrl,
+  searchProductsByQuery,
+  addProductSize as addNewProductSize,
 } from "../models/product"
 import { ensureImageDimensions } from "../utils/image-utils"
+import { getAllCategories } from "../models/category"
 
 export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
@@ -235,3 +240,116 @@ export const deleteSize = async (req: NextApiRequest, res: NextApiResponse) => {
   }
 }
 
+// Add these functions to your product-controller.ts file
+
+
+// Set an image as primary
+export const setPrimaryImage = async (req: NextApiRequest, res: NextApiResponse) => {
+  try {
+    const { id, imageId } = req.query
+
+    if (!id || !imageId) {
+      return res.status(400).json({ error: "Product ID and Image ID are required" })
+    }
+
+    const productId = Number.parseInt(id as string)
+    const imagId = Number.parseInt(imageId as string)
+    
+    const success = await setProductImageAsPrimary(productId, imagId)
+
+    if (!success) {
+      return res.status(404).json({ error: "Image not found" })
+    }
+
+    return res.status(200).json({ message: "Image set as primary successfully" })
+  } catch (error) {
+    console.error("Error setting primary image:", error)
+    return res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+// Add an image by URL
+export const addImageByUrl = async (req: NextApiRequest, res: NextApiResponse) => {
+  try {
+    const { id } = req.query
+    const { image_url, is_primary, width, height, alt_text } = req.body
+
+    if (!id || !image_url) {
+      return res.status(400).json({ error: "Product ID and image URL are required" })
+    }
+
+    // Process the image to ensure it has dimensions
+    const processedImage = ensureImageDimensions(
+      image_url,
+      width ? Number.parseInt(width as string) : undefined,
+      height ? Number.parseInt(height as string) : undefined,
+    )
+
+    const image = await addProductImageByUrl(
+      Number.parseInt(id as string),
+      processedImage.url,
+      is_primary,
+      processedImage.width,
+      processedImage.height,
+      alt_text as string,
+    )
+
+    return res.status(201).json({ message: "Image added successfully", image })
+  } catch (error) {
+    console.error("Error adding product image by URL:", error)
+    return res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+// Search products
+export const searchProducts = async (req: NextApiRequest, res: NextApiResponse) => {
+  try {
+    const { q } = req.query
+
+    if (!q) {
+      return res.status(400).json({ error: "Search query is required" })
+    }
+
+    const products = await searchProductsByQuery(q as string)
+    
+    return res.status(200).json({ products })
+  } catch (error) {
+    console.error("Error searching products:", error)
+    return res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+// Get all categories
+export const getCategories = async (req: NextApiRequest, res: NextApiResponse) => {
+  try {
+    const categories = await getAllCategories()
+    
+    return res.status(200).json({ categories })
+  } catch (error) {
+    console.error("Error getting categories:", error)
+    return res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+// Add a size to a product
+export const addSize = async (req: NextApiRequest, res: NextApiResponse) => {
+  try {
+    const { id } = req.query
+    const { size, stock_quantity } = req.body
+
+    if (!id || !size || stock_quantity === undefined) {
+      return res.status(400).json({ error: "Product ID, size, and stock quantity are required" })
+    }
+
+    const productSize = await addNewProductSize(
+      Number.parseInt(id as string),
+      size,
+      Number.parseInt(stock_quantity as string),
+    )
+
+    return res.status(201).json({ message: "Size added successfully", size: productSize })
+  } catch (error) {
+    console.error("Error adding product size:", error)
+    return res.status(500).json({ error: "Internal server error" })
+  }
+}

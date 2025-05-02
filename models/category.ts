@@ -15,7 +15,7 @@ export interface CategoryInput {
 
 export const getAllCategories = async (): Promise<Category[]> => {
   try {
-    const result = await query("SELECT * FROM categories ORDER BY name")
+    const result = await query("SELECT * FROM categories ORDER BY name ASC")
     return result.rows
   } catch (error) {
     console.error("Error getting all categories:", error)
