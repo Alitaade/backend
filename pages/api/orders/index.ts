@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { query } from "../../../database/connection"
 import { createOrder } from "../../../controllers/order-controller"
-import { authenticateUser, requireAdmin } from "../../../middleware/auth-middleware"
+import { authenticateUser, requireAdmin, enableCors } from "../../../middleware/auth-middleware"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Handle CORS preflight request
@@ -28,34 +28,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           })
         })
 
-      case "POST":
-        // Authenticated user - create a new order
-        return new Promise<void>((resolve, reject) => {
-          authenticateUser(req, res, async () => {
-            try {
-              await createOrder(req, res)
-              resolve()
-            } catch (error) {
-              console.error("Error in createOrder:", error)
-              if (!res.writableEnded) {
-                res.status(500).json({ error: "Server error processing order creation" })
+        case "POST":
+          // Authenticated user - create a new order
+          return await new Promise<void>((resolve, reject) => {
+            authenticateUser(req, res, async () => {
+              try {
+                await createOrder(req, res);
+                resolve();
+              } catch (error) {
+                console.error("Error in createOrder:", error);
+                if (!res.writableEnded) {
+                  res
+                    .status(500)
+                    .json({ error: "Server error processing order creation" });
+                }
+                reject(error);
               }
-              reject(error)
-            }
-          })
-        })
-
-      default:
-        res.setHeader("Allow", ["GET", "POST", "OPTIONS"])
-        return res.status(405).json({ error: "Method not allowed" })
-    }
-  } catch (error) {
-    console.error("Unhandled error in orders API handler:", error)
-    if (!res.writableEnded) {
-      return res.status(500).json({ error: "Internal server error" })
+            });
+          });
+  
+        default:
+          return res.status(405).json({ error: "Method not allowed" });
+      }
+    } catch (error) {
+      console.error("Unhandled error in orders API handler:", error);
+      if (!res.writableEnded) {
+        return res.status(500).json({ error: "Internal server error" });
+      }
     }
   }
-}
 
 async function getOrdersHandler(req: NextApiRequest, res: NextApiResponse) {
   try {
