@@ -21,7 +21,13 @@ interface ExtendedNextApiRequest extends NextApiRequest {
     whatsapp?: string;
   };
 }
-
+interface AuthenticatedRequest extends NextApiRequest {
+  user?: {
+    id: number
+    email: string
+    is_admin: boolean
+  }
+}
 export const createOrder = async (
   req: NextApiRequest,
   res: NextApiResponse
@@ -70,7 +76,7 @@ export const createOrder = async (
   }
 };
 
-export const getOrder = async (req: NextApiRequest, res: NextApiResponse) => {
+export const getOrder = async (req: AuthenticatedRequest, res: NextApiResponse) => {
   try {
     const { id } = req.query;
 
@@ -78,10 +84,25 @@ export const getOrder = async (req: NextApiRequest, res: NextApiResponse) => {
       return res.status(400).json({ error: "Order ID is required" });
     }
 
+    // Get user from authentication middleware
+    const userId = req.user?.id;
+    const isAdmin = req.user?.is_admin;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
     const order = await getOrderById(Number.parseInt(id as string));
 
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
+    }
+
+    // Check permission (this can be moved to the API route if needed)
+    if (String(order.user_id) !== String(userId) && !isAdmin) {
+      return res.status(403).json({ 
+        error: "You do not have permission to access this order" 
+      });
     }
 
     return res.status(200).json({ order });
@@ -92,7 +113,7 @@ export const getOrder = async (req: NextApiRequest, res: NextApiResponse) => {
 };
 
 export const getOrderByNumber = async (
-  req: NextApiRequest,
+  req: AuthenticatedRequest,
   res: NextApiResponse
 ) => {
   try {
@@ -102,10 +123,25 @@ export const getOrderByNumber = async (
       return res.status(400).json({ error: "Order number is required" });
     }
 
+    // Get user from authentication middleware
+    const userId = req.user?.id;
+    const isAdmin = req.user?.is_admin;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
     const order = await getOrderByOrderNumber(orderNumber as string);
 
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
+    }
+
+    // Check permission (this can be moved to the API route if needed)
+    if (String(order.user_id) !== String(userId) && !isAdmin) {
+      return res.status(403).json({ 
+        error: "You do not have permission to access this order" 
+      });
     }
 
     return res.status(200).json({ order });
@@ -114,7 +150,6 @@ export const getOrderByNumber = async (
     return res.status(500).json({ error: "Internal server error" });
   }
 };
-
 export const getUserOrderHistory = async (
   req: NextApiRequest,
   res: NextApiResponse
