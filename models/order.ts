@@ -127,17 +127,15 @@ export const createOrderFromCart = async (
   }
 };
 
-export const getOrderById = async (
-  id: number
-): Promise<OrderWithItems | null> => {
+export const getOrderById = async (id: number): Promise<OrderWithItems | null> => {
   try {
-    const orderResult = await query("SELECT * FROM orders WHERE id = $1", [id]);
+    const orderResult = await query("SELECT * FROM orders WHERE id = $1", [id])
 
     if (orderResult.rows.length === 0) {
-      return null;
+      return null
     }
 
-    const order = orderResult.rows[0];
+    const order = orderResult.rows[0]
 
     // Get order items
     const itemsResult = await query(
@@ -148,8 +146,8 @@ export const getOrderById = async (
      JOIN products p ON oi.product_id = p.id
      WHERE oi.order_id = $1
      `,
-      [id]
-    );
+      [id],
+    )
 
     return {
       ...order,
@@ -162,12 +160,12 @@ export const getOrderById = async (
           image: item.product_image,
         },
       })),
-    };
+    }
   } catch (error) {
-    console.error("Error getting order by ID:", error);
-    throw error;
+    console.error("Error getting order by ID:", error)
+    throw error
   }
-};
+}
 
 // Add this function to get an order by partial order number match
 export const getOrderByPartialOrderNumber = async (
@@ -217,78 +215,83 @@ export const getOrderByPartialOrderNumber = async (
   }
 };
 
-// Update the getOrderByOrderNumber function to try partial matching if exact match fails
-export const getOrderByOrderNumber = async (orderNumber: string) => {
+export const getOrderByOrderNumber = async (orderNumber: string): Promise<OrderWithItems | null> => {
   try {
-    console.log(`Looking for order with order_number: ${orderNumber}`);
+    console.log(`Looking for order with order_number: ${orderNumber}`)
 
     // First try exact match
-    const result = await query(`SELECT * FROM orders WHERE order_number = $1`, [
-      orderNumber,
-    ]);
+    const orderResult = await query("SELECT * FROM orders WHERE order_number = $1", [orderNumber])
 
-    // If no exact match, try partial match
-    if (result.rows.length === 0) {
-      console.log(
-        `No exact match found for order_number: ${orderNumber}, trying partial match`
-      );
+    if (orderResult.rows.length > 0) {
+      console.log(`Found order with exact match for order_number: ${orderNumber}`)
+      const order = orderResult.rows[0]
 
-      // Try with LIKE query
-      const partialResult = await query(
-        `SELECT * FROM orders WHERE order_number LIKE $1`,
-        [`%${orderNumber}%`]
-      );
-
-      if (partialResult.rows.length === 0) {
-        console.log(
-          `No orders found with order_number containing: ${orderNumber}`
-        );
-        return null;
-      }
-
-      console.log(
-        `Found order with partial match for order_number: ${orderNumber}`
-      );
-
-      // Get the order items
-      const orderItems = await query(
+      // Get order items
+      const itemsResult = await query(
         `
-          SELECT oi.*, p.name as product_name, p.price as product_price, 
-          (SELECT image_url FROM product_images WHERE product_id = oi.product_id AND is_primary = true LIMIT 1) as product_image
-          FROM order_items oi
-          JOIN products p ON oi.product_id = p.id
-          WHERE oi.order_id = $1
-          `,
-        [partialResult.rows[0].id]
-      );
-
-      return {
-        ...partialResult.rows[0],
-        items: orderItems.rows,
-      };
-    }
-
-    // Get the order items for exact match
-    const orderItems = await query(
-      `
         SELECT oi.*, p.name as product_name, p.price as product_price, 
         (SELECT image_url FROM product_images WHERE product_id = oi.product_id AND is_primary = true LIMIT 1) as product_image
         FROM order_items oi
         JOIN products p ON oi.product_id = p.id
         WHERE oi.order_id = $1
         `,
-      [result.rows[0].id]
-    );
+        [order.id],
+      )
 
-    return {
-      ...result.rows[0],
-      items: orderItems.rows,
-    };
+      return {
+        ...order,
+        items: itemsResult.rows.map((item) => ({
+          ...item,
+          product: {
+            id: item.product_id,
+            name: item.product_name,
+            price: item.product_price,
+            image: item.product_image,
+          },
+        })),
+      }
+    }
+
+    // If no exact match, try partial match (the order number might be part of a longer string)
+    const partialResult = await query("SELECT * FROM orders WHERE order_number LIKE $1", [`%${orderNumber}%`])
+
+    if (partialResult.rows.length > 0) {
+      console.log(`Found order with partial match for order_number: ${orderNumber}`)
+      const order = partialResult.rows[0]
+
+      // Get order items
+      const itemsResult = await query(
+        `
+        SELECT oi.*, p.name as product_name, p.price as product_price, 
+        (SELECT image_url FROM product_images WHERE product_id = oi.product_id AND is_primary = true LIMIT 1) as product_image
+        FROM order_items oi
+        JOIN products p ON oi.product_id = p.id
+        WHERE oi.order_id = $1
+        `,
+        [order.id],
+      )
+
+      return {
+        ...order,
+        items: itemsResult.rows.map((item) => ({
+          ...item,
+          product: {
+            id: item.product_id,
+            name: item.product_name,
+            price: item.product_price,
+            image: item.product_image,
+          },
+        })),
+      }
+    }
+
+    console.log(`No order found for order_number: ${orderNumber}`)
+    return null
   } catch (error) {
-    console.error("Error getting order by order number:", error);
-    throw error;
+    console.error("Error getting order by order number:", error)
+    throw error
   }
-};
+}
 
 export const getUserOrders = async (
   userId: number
