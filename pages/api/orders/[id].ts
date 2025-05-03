@@ -91,7 +91,6 @@ export default async function handler(
             console.log(
               `Successfully returning order ${id} to user ${req.user.id}`
             );
-            // CHANGE: Wrap the order in an order property
             res.status(200).json({ order });
           } catch (error) {
             console.error("Error getting order:", error);
@@ -160,7 +159,6 @@ export default async function handler(
             console.log(
               `Successfully returning order ${orderId} to user ${req.user.id}`
             );
-            // CHANGE: Wrap the order in an order property
             res.status(200).json({ order });
           } catch (error) {
             console.error("Error getting order:", error);
