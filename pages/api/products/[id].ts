@@ -3,6 +3,14 @@ import { getProduct, updateExistingProduct, deleteExistingProduct } from "../../
 import { requireAdmin, enableCors } from "../../../middleware/auth-middleware"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Handle preflight OPTIONS request
+  if (req.method === "OPTIONS") {
+    res.setHeader("Access-Control-Allow-Origin", "*") // Replace with specific origin in production
+    res.setHeader("Access-Control-Allow-Methods", "PUT, DELETE, GET, OPTIONS")
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+    return res.status(200).end()
+  }
+
   switch (req.method) {
     case "GET":
       // Public endpoint - get a product by ID
