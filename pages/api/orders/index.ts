@@ -14,6 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       case "GET":
         // Admin only - get all orders
         return new Promise<void>((resolve, reject) => {
+          enableCors(req, res, () => {
           requireAdmin(req, res, async () => {
             try {
               await getOrdersHandler(req, res)
@@ -26,6 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               reject(error)
             }
           })
+        })
         })
 
         case "POST":
