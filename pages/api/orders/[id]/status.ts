@@ -1,7 +1,7 @@
 // pages/api/orders/[id]/status.ts
 import type { NextApiRequest, NextApiResponse } from "next"
 import { requireAdmin } from "../../../../middleware/auth-middleware"
-import { updateOrderStatusHandler } from "../../../../controllers/order-status-controller"
+import { updateOrderStatusHandler } from "@/controllers/order-controller"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Handle CORS preflight request
