@@ -531,3 +531,108 @@ export interface OrderStatusRow {
   status: string;
   count: string;
 }
+// Paystack related interfaces
+export interface PaystackPaymentResponse {
+  status: boolean;
+  message?: string;
+  data?: {
+    authorization_url?: string;
+    access_code?: string;
+    reference?: string;
+    status?: string;
+    amount?: number;
+    currency?: string;
+    transaction_date?: string;
+    customer?: {
+      id?: number;
+      email?: string;
+      name?: string;
+      phone?: string;
+    };
+    metadata?: Record<string, any>;
+  };
+  usedCurrency?: string;
+  originalCurrency?: string;
+}
+
+export interface PaystackVerificationResponse {
+  status: boolean;
+  message?: string;
+  data?: {
+    id?: number;
+    status?: string;
+    reference?: string;
+    amount?: number;
+    currency?: string;
+    transaction_date?: string;
+    gateway_response?: string;
+    channel?: string;
+    metadata?: {
+      order_id?: string;
+      customer_name?: string;
+      customer_phone?: string;
+      original_currency?: string;
+      original_amount?: number;
+      exchange_rate?: number;
+      fallback_to_ngn?: boolean;
+      custom_fields?: Array<{
+        display_name: string;
+        variable_name: string;
+        value: string;
+      }>;
+      [key: string]: any;
+    };
+    customer?: {
+      id?: number;
+      email?: string;
+      name?: string;
+      phone?: string;
+    };
+  };
+}
+
+export interface Transaction {
+  reference: string;
+  order_id: number;
+  amount: number;
+  currency: string;
+  payment_method: string;
+  status: string;
+  // Add other Transaction fields as needed
+}
+
+// Interface for InitializePayment function parameters
+export interface InitializePaymentParams {
+  orderId: string;
+  amount: number;
+  customerEmail: string;
+  customerName: string;
+  customerPhone: string;
+  callbackUrl: string;
+  currencyCode?: string;  // Default to NGN in implementation
+  exchangeRate?: number;  // Default to 1 in implementation
+  additionalMetadata?: Record<string, any>;
+}
+
+// Interface for Paystack payment payload
+export interface PaystackPaymentPayload {
+  email: string;
+  amount: number;
+  currency: string;
+  reference: string;
+  callback_url: string;
+  metadata: {
+    order_id: string;
+    customer_name: string;
+    customer_phone: string;
+    original_currency: string;
+    original_amount: number;
+    exchange_rate: number;
+    custom_fields: Array<{
+      display_name: string;
+      variable_name: string;
+      value: string;
+    }>;
+    [key: string]: any;
+  };
+}
