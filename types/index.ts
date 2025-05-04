@@ -450,7 +450,7 @@ export interface CreateOrderFromCartData {
   currency_code?: string
   currency_rate?: number
 }
-// Add these new dashboard-specific types to your types.ts file
+
 
 // For sales by period data
 export interface SalesByPeriodItem {
