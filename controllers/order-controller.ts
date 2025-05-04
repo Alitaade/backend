@@ -238,13 +238,15 @@ export const updateOrderPaymentStatusAdmin = async (req: AuthenticatedRequest, r
     return res.status(500).json({ error: "Internal server error" })
   }
 }
-
+const getValidPaymentStatuses = () => {
+  return ['pending', 'paid', 'failed', 'refunded']
+}
 export const updatePaymentStatuss = async (req: NextApiRequest, res: NextApiResponse, orderId: string) => {
   try {
     const { paymentStatus } = req.body
 
     // Validate payment status
-    const validPaymentStatuses = orderModel.getValidPaymentStatuses()
+    const validPaymentStatuses = getValidPaymentStatuses()
     if (!paymentStatus || !validPaymentStatuses.includes(paymentStatus)) {
       return res.status(400).json({ 
         error: `Invalid payment status. Must be one of: ${validPaymentStatuses.join(', ')}` 

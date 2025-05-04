@@ -681,9 +681,7 @@ export const updatePaymentStatus = async (orderId: string, paymentStatus: string
 /**
  * Get valid payment statuses
  */
-export const getValidPaymentStatuses = () => {
-  return ['pending', 'paid', 'failed', 'refunded']
-}
+
 
 // Delete order
 export const deleteOrder = async (orderId: string) => {
