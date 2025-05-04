@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next"
-import { getSalesReport } from "@/controllers/admin-controller"
+import { getSalesReport } from "@/controllers/admin-contoller"
 import { requireAdmin } from "../../../middleware/auth-middleware"
 import { applyMiddleware } from "../../../middleware/api-security"
 
