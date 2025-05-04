@@ -9,28 +9,18 @@ import {
 } from "../models/order";
 import { initializePayment, verifyPayment } from "../services/paystack-service";
 import { createVerificationToken } from "../models/token";
+import {
+  Order,
+  OrderCreateData,
+  ExtendedNextApiRequest,
+  AuthenticatedRequest,
+  ApiResponse,
+  PaymentVerificationToken
+} from "@/types"; // Import shared types
 
-// Extend the NextApiRequest to include the user property
-interface ExtendedNextApiRequest extends NextApiRequest {
-  user?: {
-    id: number;
-    email: string;
-    first_name: string;
-    last_name: string;
-    phone?: string;
-    whatsapp?: string;
-  };
-}
-interface AuthenticatedRequest extends NextApiRequest {
-  user?: {
-    id: number
-    email: string
-    is_admin: boolean
-  }
-}
 export const createOrder = async (
   req: NextApiRequest,
-  res: NextApiResponse
+  res: NextApiResponse<ApiResponse<Order>>
 ) => {
   try {
     const {
@@ -43,7 +33,10 @@ export const createOrder = async (
     } = req.body;
 
     if (!user_id || !shipping_address || !shipping_method || !payment_method) {
-      return res.status(400).json({ error: "All order details are required" });
+      return res.status(400).json({ 
+        success: false,
+        message: "All order details are required" 
+      });
     }
 
     let paymentReference = null;
@@ -51,37 +44,55 @@ export const createOrder = async (
       paymentReference = `PS-${Date.now()}`; // Generate a unique reference for Paystack
     }
 
+    const orderData: OrderCreateData = {
+      user_id: Number.parseInt(user_id as string),
+      shipping_address,
+      shipping_method,
+      payment_method,
+      currency_code,
+      currency_rate,
+      total_amount: 0, // Will be calculated from cart items
+      items: [] // Will be populated from cart items
+    };
+
     const order = await createOrderFromCart(
-      {
-        user_id: Number.parseInt(user_id as string),
-        shipping_address,
-        shipping_method,
-        payment_method,
-        currency_code,
-        currency_rate,
-      },
+      orderData,
       paymentReference ?? undefined
     );
 
     if (!order) {
-      return res.status(400).json({ error: "Failed to create order" });
+      return res.status(400).json({ 
+        success: false,
+        message: "Failed to create order" 
+      });
     }
 
-    return res
-      .status(201)
-      .json({ message: "Order created successfully", order });
+    return res.status(201).json({ 
+      success: true,
+      message: "Order created successfully", 
+      data: order 
+    });
   } catch (error) {
     console.error("Error creating order:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ 
+      success: false,
+      message: "Internal server error" 
+    });
   }
 };
 
-export const getOrder = async (req: AuthenticatedRequest, res: NextApiResponse) => {
+export const getOrder = async (
+  req: AuthenticatedRequest, 
+  res: NextApiResponse<ApiResponse<Order>>
+) => {
   try {
     const { id } = req.query;
 
     if (!id) {
-      return res.status(400).json({ error: "Order ID is required" });
+      return res.status(400).json({ 
+        success: false,
+        message: "Order ID is required" 
+      });
     }
 
     // Get user from authentication middleware
@@ -89,38 +100,54 @@ export const getOrder = async (req: AuthenticatedRequest, res: NextApiResponse) 
     const isAdmin = req.user?.is_admin;
 
     if (!userId) {
-      return res.status(401).json({ error: "Authentication required" });
+      return res.status(401).json({ 
+        success: false,
+        message: "Authentication required" 
+      });
     }
 
     const order = await getOrderById(Number.parseInt(id as string));
 
     if (!order) {
-      return res.status(404).json({ error: "Order not found" });
+      return res.status(404).json({ 
+        success: false,
+        message: "Order not found" 
+      });
     }
 
     // Check permission (this can be moved to the API route if needed)
     if (String(order.user_id) !== String(userId) && !isAdmin) {
       return res.status(403).json({ 
-        error: "You do not have permission to access this order" 
+        success: false,
+        message: "You do not have permission to access this order" 
       });
     }
 
-    return res.status(200).json({ order });
+    return res.status(200).json({ 
+      success: true,
+      data: order 
+    });
   } catch (error) {
     console.error("Error getting order:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ 
+      success: false,
+      message: "Internal server error" 
+    });
   }
 };
 
 export const getOrderByNumber = async (
   req: AuthenticatedRequest,
-  res: NextApiResponse
+  res: NextApiResponse<ApiResponse<Order>>
 ) => {
   try {
     const { orderNumber } = req.query;
 
     if (!orderNumber) {
-      return res.status(400).json({ error: "Order number is required" });
+      return res.status(400).json({ 
+        success: false,
+        message: "Order number is required" 
+      });
     }
 
     // Get user from authentication middleware
@@ -128,60 +155,93 @@ export const getOrderByNumber = async (
     const isAdmin = req.user?.is_admin;
 
     if (!userId) {
-      return res.status(401).json({ error: "Authentication required" });
+      return res.status(401).json({ 
+        success: false,
+        message: "Authentication required" 
+      });
     }
 
     const order = await getOrderByOrderNumber(orderNumber as string);
 
     if (!order) {
-      return res.status(404).json({ error: "Order not found" });
+      return res.status(404).json({ 
+        success: false,
+        message: "Order not found" 
+      });
     }
 
     // Check permission (this can be moved to the API route if needed)
     if (String(order.user_id) !== String(userId) && !isAdmin) {
       return res.status(403).json({ 
-        error: "You do not have permission to access this order" 
+        success: false,
+        message: "You do not have permission to access this order" 
       });
     }
 
-    return res.status(200).json({ order });
+    return res.status(200).json({ 
+      success: true,
+      data: order 
+    });
   } catch (error) {
     console.error("Error getting order by number:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ 
+      success: false,
+      message: "Internal server error" 
+    });
   }
 };
+
 export const getUserOrderHistory = async (
   req: NextApiRequest,
-  res: NextApiResponse
+  res: NextApiResponse<ApiResponse<Order[]>>
 ) => {
   try {
     const { id } = req.query;
 
     if (!id) {
-      return res.status(400).json({ error: "User ID is required" });
+      return res.status(400).json({ 
+        success: false,
+        message: "User ID is required" 
+      });
     }
 
     const orders = await getUserOrders(Number.parseInt(id as string));
 
-    return res.status(200).json({ orders });
+    return res.status(200).json({ 
+      success: true,
+      data: orders 
+    });
   } catch (error) {
     console.error("Error getting user orders:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ 
+      success: false,
+      message: "Internal server error" 
+    });
   }
 };
 
 export const updateStatus = async (
-  req: NextApiRequest,
-  res: NextApiResponse
+  req: AuthenticatedRequest,
+  res: NextApiResponse<ApiResponse<Order>>
 ) => {
   try {
     const { id } = req.query;
     const { status } = req.body;
 
     if (!id || !status) {
-      return res
-        .status(400)
-        .json({ error: "Order ID and status are required" });
+      return res.status(400).json({ 
+        success: false,
+        message: "Order ID and status are required" 
+      });
+    }
+
+    // Check if admin
+    const isAdmin = req.user?.is_admin;
+    if (!isAdmin) {
+      return res.status(403).json({ 
+        success: false,
+        message: "Only administrators can update order status" 
+      });
     }
 
     const order = await updateOrderStatus(
@@ -190,28 +250,49 @@ export const updateStatus = async (
     );
 
     if (!order) {
-      return res.status(404).json({ error: "Order not found" });
+      return res.status(404).json({ 
+        success: false,
+        message: "Order not found" 
+      });
     }
 
-    return res.status(200).json({ message: "Order status updated", order });
+    return res.status(200).json({ 
+      success: true,
+      message: "Order status updated", 
+      data: order 
+    });
   } catch (error) {
     console.error("Error updating order status:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ 
+      success: false,
+      message: "Internal server error" 
+    });
   }
 };
 
 export const updatePaymentStatus = async (
-  req: NextApiRequest,
-  res: NextApiResponse
+  req: AuthenticatedRequest,
+  res: NextApiResponse<ApiResponse<Order>>
 ): Promise<void> => {
   try {
     const { id } = req.query;
     const { paymentStatus, paymentReference } = req.body;
 
     if (!id || !paymentStatus) {
-      res
-        .status(400)
-        .json({ error: "Order ID and payment status are required" });
+      res.status(400).json({ 
+        success: false,
+        message: "Order ID and payment status are required" 
+      });
+      return;
+    }
+
+    // Check if admin
+    const isAdmin = req.user?.is_admin;
+    if (!isAdmin) {
+      res.status(403).json({ 
+        success: false,
+        message: "Only administrators can update payment status" 
+      });
       return;
     }
 
@@ -222,42 +303,62 @@ export const updatePaymentStatus = async (
     );
 
     if (!order) {
-      res.status(404).json({ error: "Order not found" });
+      res.status(404).json({ 
+        success: false,
+        message: "Order not found" 
+      });
       return;
     }
 
-    res.status(200).json({ message: "Order payment status updated", order });
+    res.status(200).json({ 
+      success: true,
+      message: "Order payment status updated", 
+      data: order 
+    });
   } catch (error) {
     console.error("Error updating order payment status:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ 
+      success: false,
+      message: "Internal server error" 
+    });
   }
 };
 
 // Update the initializePaystackPayment function to use the request origin for callback URL
 export const initializePaystackPayment = async (
   req: ExtendedNextApiRequest,
-  res: NextApiResponse
+  res: NextApiResponse<ApiResponse<{
+    paymentReference: string;
+    paymentUrl: string;
+  }>>
 ) => {
   try {
     const { order_id } = req.body;
     const userId = req.user?.id;
 
     if (!order_id || !userId) {
-      return res
-        .status(400)
-        .json({ error: "Order ID and user ID are required" });
+      return res.status(400).json({ 
+        success: false,
+        message: "Order ID and user ID are required" 
+      });
     }
 
     const order = await getOrderById(Number(order_id));
 
     if (!order) {
-      return res.status(404).json({ error: "Order not found" });
+      return res.status(404).json({ 
+        success: false,
+        message: "Order not found" 
+      });
     }
 
     const user = req.user;
 
     if (!user) {
-      return res.status(404).json({ error: "User not found" });
+      return res.status(404).json({ 
+        success: false,
+        message: "User not found" 
+      });
     }
 
     // Determine the callback URL based on the request origin
@@ -286,32 +387,47 @@ export const initializePaystackPayment = async (
       );
 
       return res.status(200).json({
+        success: true,
         message: "Payment initialized successfully",
-        paymentReference: paymentResponse.data?.reference,
-        paymentUrl: paymentResponse.data?.authorization_url,
+        data: {
+          paymentReference: paymentResponse.data?.reference,
+          paymentUrl: paymentResponse.data?.authorization_url,
+        }
       });
     } else {
-      return res.status(400).json({ error: "Failed to initialize payment" });
+      return res.status(400).json({ 
+        success: false,
+        message: "Failed to initialize payment" 
+      });
     }
   } catch (error: any) {
     console.error("Error initializing payment:", error);
-    return res
-      .status(500)
-      .json({ error: error.message || "Internal server error" });
+    return res.status(500).json({ 
+      success: false,
+      message: error.message || "Internal server error" 
+    });
   }
 };
 
 // Update the verifyPaystackPayment function to better handle order numbers and set status to completed
 export const verifyPaystackPayment = async (
   req: NextApiRequest,
-  res: NextApiResponse
+  res: NextApiResponse<ApiResponse<{
+    verified: boolean;
+    data: any;
+    token?: string;
+    orderId?: string;
+  }>>
 ) => {
   try {
     const { reference } = req.query;
 
     if (!reference) {
       console.log("Error: Payment reference is required");
-      return res.status(400).json({ error: "Payment reference is required" });
+      return res.status(400).json({ 
+        success: false,
+        message: "Payment reference is required" 
+      });
     }
 
     console.log(`Verifying payment with reference: ${reference}`);
@@ -337,7 +453,7 @@ export const verifyPaystackPayment = async (
         }
       }
 
-      let order = null;
+      let order: Order | null = null;
 
       if (orderId) {
         // Update order payment status
@@ -380,7 +496,7 @@ export const verifyPaystackPayment = async (
           );
 
           // Generate a verification token for this order
-          const verificationToken = await createVerificationToken(
+          const verificationToken: PaymentVerificationToken = await createVerificationToken(
             order.id,
             order.order_number
           );
@@ -389,11 +505,14 @@ export const verifyPaystackPayment = async (
           );
 
           return res.status(200).json({
+            success: true,
             message: "Payment verified successfully",
-            verified: true,
-            data: verificationResponse.data,
-            token: verificationToken.token,
-            orderId: order.order_number,
+            data: {
+              verified: true,
+              data: verificationResponse.data,
+              token: verificationToken.token,
+              orderId: order.order_number,
+            }
           });
         } else {
           console.log(`Order not found for order number: ${orderId}`);
@@ -409,24 +528,31 @@ export const verifyPaystackPayment = async (
         "Payment verified but could not generate token - order not found"
       );
       return res.status(200).json({
+        success: true,
         message: "Payment verified successfully but order not found",
-        verified: true,
-        data: verificationResponse.data,
+        data: {
+          verified: true,
+          data: verificationResponse.data,
+        }
       });
     } else {
       console.log(
         `Payment verification failed or incomplete: ${verificationResponse.data?.status}`
       );
       return res.status(200).json({
+        success: true,
         message: "Payment not completed",
-        verified: false,
-        data: verificationResponse.data,
+        data: {
+          verified: false,
+          data: verificationResponse.data,
+        }
       });
     }
   } catch (error: any) {
     console.error("Error verifying payment:", error);
-    return res
-      .status(500)
-      .json({ error: error.message || "Internal server error" });
+    return res.status(500).json({ 
+      success: false,
+      message: error.message || "Internal server error" 
+    });
   }
 };

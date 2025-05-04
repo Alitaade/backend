@@ -1,16 +1,6 @@
-import { query } from "../database/connection"
+import { query } from "@/database/connection"
 import crypto from "crypto"
-
-export interface VerificationCode {
-  id: number
-  user_id: number
-  code: string
-  type: string
-  expires_at: Date
-  created_at: Date
-  attempts: number
-  verified: boolean
-}
+import type { VerificationCode, Token } from "@/types"
 
 // Generate a random verification code
 export const generateVerificationCode = (length = 6): string => {
@@ -166,10 +156,7 @@ export const invalidatePreviousCodes = async (userId: number, type = "password_r
 }
 
 // Create a verification token for password reset link
-export const createPasswordResetToken = async (
-  userId: number,
-  expiresInMinutes = 15,
-): Promise<{ token: string; expiresAt: Date }> => {
+export const createPasswordResetToken = async (userId: number, expiresInMinutes = 15): Promise<Token> => {
   try {
     // Generate a secure random token
     const token = crypto.randomBytes(32).toString("hex")
@@ -186,7 +173,7 @@ export const createPasswordResetToken = async (
       [userId, token, expiresAt],
     )
 
-    return { token, expiresAt }
+    return { token, expires_at: expiresAt }
   } catch (error) {
     console.error("Error creating password reset token:", error)
     throw new Error("Failed to create reset token")

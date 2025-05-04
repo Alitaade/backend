@@ -1,17 +1,5 @@
-import { query } from "../database/connection"
-
-export interface Category {
-  id: number
-  name: string
-  description: string | null
-  created_at: Date
-  updated_at: Date
-}
-
-export interface CategoryInput {
-  name: string
-  description?: string
-}
+import { query } from "@/database/connection"
+import type { Category, CategoryInput } from "@/types"
 
 export const getAllCategories = async (): Promise<Category[]> => {
   try {
@@ -99,4 +87,3 @@ export const deleteCategory = async (id: number): Promise<boolean> => {
     throw error
   }
 }
-

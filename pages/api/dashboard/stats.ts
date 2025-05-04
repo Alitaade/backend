@@ -1,41 +1,17 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { query } from "../../../database/connection";
-import { requireAdmin } from "../../../middleware/auth-middleware";
+import { query } from "@/database/connection";
+import { requireAdmin } from "@/middleware/auth-middleware";
 import { subDays, subMonths, format, startOfDay, endOfDay, eachDayOfInterval, eachMonthOfInterval } from "date-fns";
-
-interface SalesByPeriodRow {
-  date: string;
-  sales: string;
-}
-
-interface RecentOrderRow {
-  id: number;
-  user_id: number;
-  order_number: string;
-  total_amount: string;
-  status: string;
-  payment_status: string;
-  payment_method: string;
-  shipping_address: string;
-  created_at: string;
-  updated_at: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-}
-
-interface OrderStatusRow {
-  status: string;
-  count: string;
-}
-
-interface TopProductRow {
-  id: number;
-  name: string;
-  price: string;
-  order_count: string;
-  total_quantity: string;
-}
+import {
+  SalesByPeriodRow, 
+  RecentOrderRow, 
+  OrderStatusRow, 
+  TopProductRow,
+  DashboardStatsResponse,
+  SalesByPeriodItem,
+  RecentOrderWithUser,
+  TopProductItem
+} from "@/types";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Set CORS headers for all responses
@@ -70,7 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   });
 }
 
-async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
+async function getDashboardStats(req: NextApiRequest, res: NextApiResponse<DashboardStatsResponse | { error: string }>) {
   try {
     const { range = "30days" } = req.query;
 
@@ -152,7 +128,7 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
     const salesByDayResult = await query(salesByDayQuery, [formattedStartDate, formattedEndDate]);
 
     // Format sales by period - Keep as strings to match frontend expectations
-    let salesByDay = salesByDayResult.rows.map((row: SalesByPeriodRow) => ({
+    let salesByDay: SalesByPeriodItem[] = salesByDayResult.rows.map((row: SalesByPeriodRow) => ({
       date: format(new Date(row.date), range === "12months" ? "yyyy-MM" : "yyyy-MM-dd"),
       sales: row.sales,
     }));
@@ -189,7 +165,7 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
     const recentOrdersResult = await query(recentOrdersQuery);
 
     // Format recent orders to match frontend expectations
-    const recentOrders = recentOrdersResult.rows.map((order: RecentOrderRow) => ({
+    const recentOrders: RecentOrderWithUser[] = recentOrdersResult.rows.map((order: RecentOrderRow) => ({
       id: order.id,
       user_id: order.user_id,
       order_number: order.order_number,
@@ -227,7 +203,7 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
     const topProductsResult = await query(topProductsQuery, [formattedStartDate, formattedEndDate]);
 
     // Format top products to match frontend expectations - convert numbers to strings
-    let topProducts = topProductsResult.rows.map((row: TopProductRow) => ({
+    let topProducts: TopProductItem[] = topProductsResult.rows.map((row: TopProductRow) => ({
       id: row.id,
       name: row.name || 'Unknown Product',
       price: Number.parseFloat(row.price),
@@ -246,7 +222,7 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
       totalOrders,
       totalProducts,
       totalRevenue,
-      salesByDay,  // Renamed from salesByPeriod to match frontend
+      salesByDay,
       recentOrders,
       topProducts,
     });
@@ -262,6 +238,6 @@ async function getDashboardStats(req: NextApiRequest, res: NextApiResponse) {
       salesByDay: [],
       recentOrders: [],
       topProducts: [],
-    });
+    } as any);
   }
 }

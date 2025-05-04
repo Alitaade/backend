@@ -1,14 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from "next"
-import { authenticateUser } from "../../../middleware/auth-middleware"
-import { getOrder, getOrderByNumber } from "../../../controllers/order-controller" // Import your controllers
-
-interface AuthenticatedRequest extends NextApiRequest {
-  user?: {
-    id: number
-    email: string
-    is_admin: boolean
-  }
-}
+import type { NextApiResponse } from "next"
+import { authenticateUser } from "@/middleware/auth-middleware"
+import { getOrder, getOrderByNumber } from "@/controllers/order-controller" // Import your controllers
+import { AuthenticatedRequest, Order } from "@/types" // Import types from your types file
 
 export default async function handler(req: AuthenticatedRequest, res: NextApiResponse) {
   // Handle CORS preflight request (OPTIONS)
@@ -55,7 +48,7 @@ export default async function handler(req: AuthenticatedRequest, res: NextApiRes
               // If the controller didn't end the response, we need to verify permissions
               if (!res.writableEnded) {
                 const responseData = res.statusCode === 200 ? (res as any)._getJSONData?.() : null
-                const order = responseData?.order
+                const order = responseData?.order as Order | undefined
                 
                 if (order) {
                   // Check if the order belongs to the authenticated user or if the user is an admin
@@ -76,7 +69,7 @@ export default async function handler(req: AuthenticatedRequest, res: NextApiRes
               // If the controller didn't end the response, we need to verify permissions
               if (!res.writableEnded) {
                 const responseData = res.statusCode === 200 ? (res as any)._getJSONData?.() : null
-                const order = responseData?.order
+                const order = responseData?.order as Order | undefined
                 
                 if (order) {
                   // Check if the order belongs to the authenticated user or if the user is an admin

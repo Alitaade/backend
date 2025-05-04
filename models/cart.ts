@@ -1,25 +1,6 @@
-import { query } from "../database/connection"
-import { getProductById } from "./product"
-
-export interface CartItem {
-  id: number
-  cart_id: number
-  product_id: number
-  size: string | null
-  quantity: number
-  created_at: Date
-  updated_at: Date
-  product?: any
-}
-
-export interface Cart {
-  id: number
-  user_id: number
-  created_at: Date
-  updated_at: Date
-  items: CartItem[]
-  total: number
-}
+import { query } from "@/database/connection"
+import { getProductById } from "@/models/product"
+import type { Cart } from "@/types"
 
 export const getCartByUserId = async (user_id: number): Promise<Cart | null> => {
   try {
@@ -228,4 +209,3 @@ export const clearCart = async (user_id: number): Promise<Cart> => {
     throw error
   }
 }
-
