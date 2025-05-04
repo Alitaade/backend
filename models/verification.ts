@@ -1,6 +1,6 @@
-import { query } from "@/database/connection"
+import { query } from "../database/connection"
 import crypto from "crypto"
-import type { VerificationCode, Token } from "@/types"
+import type { VerificationCode, Token } from "../types"
 
 // Generate a random verification code
 export const generateVerificationCode = (length = 6): string => {

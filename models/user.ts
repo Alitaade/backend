@@ -1,6 +1,6 @@
-import { query } from "@/database/connection"
+import { query } from "../database/connection"
 import bcrypt from "bcryptjs"
-import type { User, UserInput } from "@/types"
+import type { User, UserInput } from "../types"
 
 export const findUserByEmail = async (email: string): Promise<User | null> => {
   try {

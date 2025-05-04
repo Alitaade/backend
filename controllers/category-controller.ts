@@ -59,7 +59,10 @@ export const updateExistingCategory = async (req: NextApiRequest, res: NextApiRe
       return res.status(400).json({ error: "Category ID is required" })
     }
 
-    const category = await updateCategory(Number.parseInt(id as string), { name, description })
+    const category = await updateCategory(Number.parseInt(id as string), {
+      name,
+      description,
+    })
 
     if (!category) {
       return res.status(404).json({ error: "Category not found" })
@@ -92,4 +95,3 @@ export const deleteExistingCategory = async (req: NextApiRequest, res: NextApiRe
     return res.status(500).json({ error: "Internal server error" })
   }
 }
-

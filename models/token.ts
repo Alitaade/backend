@@ -1,6 +1,6 @@
-import { query } from "@/database/connection"
+import { query } from "../database/connection"
 import crypto from "crypto"
-import type { Token } from "@/types"
+import type { Token } from "../types"
 
 // Generate a secure random token
 export const generateToken = (length = 32): string => {

@@ -1,6 +1,43 @@
-import { query } from "@/database/connection"
-import { getProductById } from "@/models/product"
-import type { Cart } from "@/types"
+import { query } from "../database/connection"
+import type { Cart } from "../types"
+
+// Get product by ID function - moved from product model to avoid circular dependencies
+const getProductDetailsForCart = async (productId: number) => {
+  try {
+    const productResult = await query(
+      `
+      SELECT p.*, c.name as category_name
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+      WHERE p.id = $1
+      `,
+      [productId],
+    )
+
+    if (productResult.rows.length === 0) {
+      return null
+    }
+
+    const product = productResult.rows[0]
+
+    // Get images
+    const imagesResult = await query("SELECT * FROM product_images WHERE product_id = $1 ORDER BY is_primary DESC", [
+      productId,
+    ])
+
+    // Get sizes
+    const sizesResult = await query("SELECT * FROM product_sizes WHERE product_id = $1", [productId])
+
+    return {
+      ...product,
+      images: imagesResult.rows,
+      sizes: sizesResult.rows,
+    }
+  } catch (error) {
+    console.error("Error getting product details for cart:", error)
+    throw error
+  }
+}
 
 export const getCartByUserId = async (user_id: number): Promise<Cart | null> => {
   try {
@@ -29,7 +66,7 @@ export const getCartByUserId = async (user_id: number): Promise<Cart | null> => 
     let total = 0
 
     for (const item of cartItems) {
-      const product = await getProductById(item.product_id)
+      const product = await getProductDetailsForCart(item.product_id)
 
       if (product) {
         cartItemsWithProducts.push({
@@ -69,7 +106,7 @@ export const addItemToCart = async (
     const cart_id = cartResult.rows[0].id
 
     // Check if the product exists
-    const product = await getProductById(product_id)
+    const product = await getProductDetailsForCart(product_id)
     if (!product) {
       throw new Error("Product not found")
     }

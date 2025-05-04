@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getUserOrders } from "../../../models/order";
+import { getUserOrderHistory } from "@/controllers/order-controller";
 import { authenticateUser } from "../../../middleware/auth-middleware";
 
 export default async function handler(
@@ -27,8 +27,8 @@ export default async function handler(
   return new Promise<void>((resolve) => {
     authenticateUser(req, res, async () => {
       try {
-        //@ts-ignore
         // Get user ID from authenticated user
+        //@ts-ignore
         const userId = req.user?.id;
 
         if (!userId) {
@@ -38,14 +38,20 @@ export default async function handler(
         }
 
         console.log(`Fetching orders for user ID: ${userId}`);
-        const orders = await getUserOrders(userId);
-
-        res.status(200).json({ orders });
+        
+        // Update req.query with the authenticated user ID
+        req.query.id = userId.toString();
+        
+        // Call the controller with req and res
+        await getUserOrderHistory(req, res);
+        
+        // Since getUserOrderHistory sends the response, we just need to resolve
+        resolve();
       } catch (error) {
-        console.error("Error getting user orders:", error);
+        console.error("Error in order history handler:", error);
         res.status(500).json({ error: "Internal server error" });
+        resolve();
       }
-      resolve();
     });
   });
 }

@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { createVerificationToken } from "../../../models/token";
-import { getOrderByOrderNumber } from "../../../models/order";
+import { getOrderByNumber } from "@/controllers/order-controller";
 import { applyMiddleware } from "../../../middleware/api-security";
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -18,9 +18,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         error: "Order number is required",
       });
     }
-
+    req.query.id = orderNumber.toString();
     // Get the order to verify it exists and get the ID
-    const order = await getOrderByOrderNumber(orderNumber);
+    const order = await getOrderByNumber(req, res);
     if (!order) {
       console.log(`Error: Order not found for order number: ${orderNumber}`);
       return res.status(404).json({

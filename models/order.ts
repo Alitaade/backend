@@ -1,29 +1,29 @@
-import { query } from "../database/connection";
-import { getCartByUserId, clearCart } from "./cart";
-import { Order, CreateOrderFromCartData, OrderWithItems } from "@/types"
+import { query } from "../database/connection"
+import { getCartByUserId, clearCart } from "./cart"
+import type { Order, CreateOrderFromCartData, OrderWithItems } from "@/types"
 
-// Update the createOrderFromCart function to handle currency information
+// Create order from cart
 export const createOrderFromCart = async (
   orderData: CreateOrderFromCartData,
-  paymentReference?: string | null
+  paymentReference?: string | null,
 ): Promise<OrderWithItems | null> => {
   try {
     // Start a transaction
-    await query("BEGIN");
+    await query("BEGIN")
 
     // Get the user's cart
-    const cart = await getCartByUserId(orderData.user_id);
+    const cart = await getCartByUserId(orderData.user_id)
 
     if (!cart) {
-      throw new Error("Cart not found");
+      throw new Error("Cart not found")
     }
 
     if (!cart.items || cart.items.length === 0) {
-      throw new Error("Cart is empty");
+      throw new Error("Cart is empty")
     }
 
     // Generate a unique order number
-    const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`
 
     // Create the order with currency information
     const orderResult = await query(
@@ -44,16 +44,14 @@ export const createOrderFromCart = async (
         orderData.shipping_address,
         orderData.shipping_method,
         orderData.payment_method,
-        orderData.payment_method === "manual_transfer"
-          ? "awaiting_payment"
-          : "pending",
+        orderData.payment_method === "manual_transfer" ? "awaiting_payment" : "pending",
         paymentReference,
         orderData.currency_code || "USD", // Default to USD if not provided
         orderData.currency_rate || 1, // Default to 1 if not provided
-      ]
-    );
+      ],
+    )
 
-    const order = orderResult.rows[0];
+    const order = orderResult.rows[0]
 
     // Create order items from cart items
     for (const item of cart.items) {
@@ -68,26 +66,41 @@ export const createOrderFromCart = async (
           item.quantity,
           item.product.price,
           item.size,
-        ]
-      );
+        ],
+      )
     }
 
     // Clear the cart
-    await clearCart(orderData.user_id);
+    await clearCart(orderData.user_id)
 
     // Commit the transaction
-    await query("COMMIT");
+    await query("COMMIT")
 
     // Return the order with items
-    return getOrderById(order.id) as Promise<OrderWithItems>;
+    return getOrderById(order.id) as Promise<OrderWithItems>
   } catch (error) {
     // Rollback the transaction in case of error
-    await query("ROLLBACK");
-    console.error("Error creating order from cart:", error);
-    throw error;
+    await query("ROLLBACK")
+    console.error("Error creating order from cart:", error)
+    throw error
   }
-};
+}
+export const getOrderItems = async (orderId: string) => {
+  const itemsResult = await query(
+    `
+    SELECT oi.*, p.name as product_name
+    FROM order_items oi
+    LEFT JOIN products p ON oi.product_id = p.id
+    WHERE oi.order_id = $1
+    ORDER BY oi.created_at ASC
+    `,
+    [orderId]
+  )
+  
+  return itemsResult.rows
+}
 
+// Get order by ID
 export const getOrderById = async (id: number): Promise<OrderWithItems | null> => {
   try {
     const orderResult = await query("SELECT * FROM orders WHERE id = $1", [id])
@@ -128,31 +141,20 @@ export const getOrderById = async (id: number): Promise<OrderWithItems | null> =
   }
 }
 
-// Add this function to get an order by partial order number match
-export const getOrderByPartialOrderNumber = async (
-  partialOrderNumber: string
-) => {
+// Get order by partial order number
+export const getOrderByPartialOrderNumber = async (partialOrderNumber: string) => {
   try {
-    console.log(
-      `Looking for order with partial order_number: ${partialOrderNumber}`
-    );
+    console.log(`Looking for order with partial order_number: ${partialOrderNumber}`)
 
     // Use LIKE query to find partial matches
-    const result = await query(
-      `SELECT * FROM orders WHERE order_number LIKE $1`,
-      [`%${partialOrderNumber}%`]
-    );
+    const result = await query(`SELECT * FROM orders WHERE order_number LIKE $1`, [`%${partialOrderNumber}%`])
 
     if (result.rows.length === 0) {
-      console.log(
-        `No orders found with partial order_number: ${partialOrderNumber}`
-      );
-      return null;
+      console.log(`No orders found with partial order_number: ${partialOrderNumber}`)
+      return null
     }
 
-    console.log(
-      `Found order with partial match for order_number: ${partialOrderNumber}`
-    );
+    console.log(`Found order with partial match for order_number: ${partialOrderNumber}`)
 
     // Get the order items
     const orderItems = await query(
@@ -163,19 +165,20 @@ export const getOrderByPartialOrderNumber = async (
         JOIN products p ON oi.product_id = p.id
         WHERE oi.order_id = $1
         `,
-      [result.rows[0].id]
-    );
+      [result.rows[0].id],
+    )
 
     return {
       ...result.rows[0],
       items: orderItems.rows,
-    };
+    }
   } catch (error) {
-    console.error("Error getting order by partial order number:", error);
-    throw error;
+    console.error("Error getting order by partial order number:", error)
+    throw error
   }
-};
+}
 
+// Get order by order number
 export const getOrderByOrderNumber = async (orderNumber: string): Promise<OrderWithItems | null> => {
   try {
     console.log(`Looking for order with order_number: ${orderNumber}`)
@@ -254,16 +257,12 @@ export const getOrderByOrderNumber = async (orderNumber: string): Promise<OrderW
   }
 }
 
-export const getUserOrders = async (
-  userId: number
-): Promise<OrderWithItems[]> => {
+// Get user orders
+export const getUserOrders = async (userId: number): Promise<OrderWithItems[]> => {
   try {
-    const ordersResult = await query(
-      "SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC",
-      [userId]
-    );
+    const ordersResult = await query("SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC", [userId])
 
-    const orders = [];
+    const orders = []
 
     for (const order of ordersResult.rows) {
       // Get order items
@@ -275,8 +274,8 @@ export const getUserOrders = async (
        JOIN products p ON oi.product_id = p.id
        WHERE oi.order_id = $1
        `,
-        [order.id]
-      );
+        [order.id],
+      )
 
       orders.push({
         ...order,
@@ -289,219 +288,427 @@ export const getUserOrders = async (
             image: item.product_image,
           },
         })),
-      });
+      })
     }
 
-    return orders;
+    return orders
   } catch (error) {
-    console.error("Error getting user orders:", error);
-    throw error;
+    console.error("Error getting user orders:", error)
+    throw error
   }
-};
+}
 
-export const updateOrderStatus = async (
-  id: number,
-  status: string
-): Promise<Order | null> => {
+// Update order status
+export const updateOrderStatus = async (id: number | string, status: string): Promise<Order | null> => {
   try {
-    const result = await query(
-      "UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
-      [status, id]
-    );
+    // Validate status
+    const validStatuses = ["pending", "processing", "shipped", "delivered", "cancelled"]
+    if (!validStatuses.includes(status)) {
+      throw new Error("Invalid status. Must be one of: pending, processing, shipped, delivered, cancelled")
+    }
 
-    return result.rows.length > 0 ? result.rows[0] : null;
+    const result = await query("UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *", [
+      status,
+      id,
+    ])
+
+    return result.rows.length > 0 ? result.rows[0] : null
   } catch (error) {
-    console.error("Error updating order status:", error);
-    throw error;
+    console.error("Error updating order status:", error)
+    throw error
   }
-};
+}
 
-// Ensure updateOrderPaymentStatus is robust
+// Update order payment status
 export const updateOrderPaymentStatus = async (
-  id: number,
+  id: number | string,
   paymentStatus: string,
-  paymentReference?: string
+  paymentReference?: string,
 ): Promise<Order | null> => {
   try {
-    let result;
-    const now = new Date();
+    let result
+    const now = new Date()
 
     // Log the update attempt
     console.log(
       `Attempting to update order ${id} payment status to ${paymentStatus}${
         paymentReference ? ` with reference ${paymentReference}` : ""
-      }`
-    );
+      }`,
+    )
 
     if (paymentReference) {
       if (paymentStatus === "completed") {
         // If payment is completed, also set the payment_date
         result = await query(
           "UPDATE orders SET payment_status = $1, payment_reference = $2, payment_date = $3, updated_at = NOW() WHERE id = $4 RETURNING *",
-          [paymentStatus, paymentReference, now, id]
-        );
+          [paymentStatus, paymentReference, now, id],
+        )
         console.log(
-          `Updated order ${id} payment status to ${paymentStatus} with reference ${paymentReference} and date ${now}`
-        );
+          `Updated order ${id} payment status to ${paymentStatus} with reference ${paymentReference} and date ${now}`,
+        )
       } else {
         result = await query(
           "UPDATE orders SET payment_status = $1, payment_reference = $2, updated_at = NOW() WHERE id = $3 RETURNING *",
-          [paymentStatus, paymentReference, id]
-        );
-        console.log(
-          `Updated order ${id} payment status to ${paymentStatus} with reference ${paymentReference}`
-        );
+          [paymentStatus, paymentReference, id],
+        )
+        console.log(`Updated order ${id} payment status to ${paymentStatus} with reference ${paymentReference}`)
       }
     } else {
       if (paymentStatus === "completed") {
         // If payment is completed, also set the payment_date
         result = await query(
           "UPDATE orders SET payment_status = $1, payment_date = $2, updated_at = NOW() WHERE id = $3 RETURNING *",
-          [paymentStatus, now, id]
-        );
-        console.log(
-          `Updated order ${id} payment status to ${paymentStatus} with date ${now}`
-        );
+          [paymentStatus, now, id],
+        )
+        console.log(`Updated order ${id} payment status to ${paymentStatus} with date ${now}`)
       } else {
-        result = await query(
-          "UPDATE orders SET payment_status = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
-          [paymentStatus, id]
-        );
-        console.log(`Updated order ${id} payment status to ${paymentStatus}`);
+        result = await query("UPDATE orders SET payment_status = $1, updated_at = NOW() WHERE id = $2 RETURNING *", [
+          paymentStatus,
+          id,
+        ])
+        console.log(`Updated order ${id} payment status to ${paymentStatus}`)
       }
     }
 
     if (result.rows.length === 0) {
-      console.error(`No rows updated for order ${id}`);
-      return null;
+      console.error(`No rows updated for order ${id}`)
+      return null
     }
 
     // Double-check that the update was successful
-    const checkResult = await query("SELECT * FROM orders WHERE id = $1", [id]);
+    const checkResult = await query("SELECT * FROM orders WHERE id = $1", [id])
     if (checkResult.rows.length > 0) {
-      console.log(
-        `Verified order ${id} now has payment_status: ${checkResult.rows[0].payment_status}`
-      );
+      console.log(`Verified order ${id} now has payment_status: ${checkResult.rows[0].payment_status}`)
     }
 
-    return result.rows.length > 0 ? result.rows[0] : null;
+    return result.rows.length > 0 ? result.rows[0] : null
   } catch (error) {
-    console.error("Error updating order payment status:", error);
-    throw error;
+    console.error("Error updating order payment status:", error)
+    throw error
   }
-};
+}
+export const updateOrderPaymentStatusAdmin = async (orderId: number, paymentStatus: string, paymentReference?: string) => {
+  const queryParams = [paymentStatus, orderId]
+  let updateQuery = `
+    UPDATE orders 
+    SET payment_status = $1, updated_at = CURRENT_TIMESTAMP
+  `
+  
+  // Add payment reference if provided
+  if (paymentReference) {
+    updateQuery += ", payment_reference = $3"
+    queryParams.push(paymentReference)
+  }
+  
+  // If payment is completed, update payment date
+  if (paymentStatus === "completed") {
+    updateQuery += ", payment_date = CURRENT_TIMESTAMP"
+  }
+  
+  updateQuery += " WHERE id = $2 RETURNING *"
+  
+  const result = await query(updateQuery, queryParams)
+  return result.rows[0]
+}
 
-export const getAllOrders = async (
-  limit = 50,
-  offset = 0,
-  status?: string
-): Promise<{ orders: OrderWithItems[]; total: number }> => {
+export async function getAllOrders(params: {
+  search?: string | string[]
+  status?: string | string[]
+  payment_status?: string | string[]
+  start_date?: string | string[]
+  end_date?: string | string[]
+  page?: number
+  limit?: number
+}) {
   try {
-    let queryText = "SELECT * FROM orders";
-    const queryParams: any[] = [];
-    let paramCounter = 1;
+    const { search, status, payment_status, start_date, end_date, page = 1, limit = 10 } = params
 
-    if (status) {
-      queryText += ` WHERE status = $${paramCounter++}`;
-      queryParams.push(status);
+    // Build the SQL query
+    let sqlQuery = `
+      SELECT o.*, 
+             u.first_name, u.last_name, u.email
+      FROM orders o
+      LEFT JOIN users u ON o.user_id = u.id
+      WHERE 1=1
+    `
+    const queryParams: any[] = []
+    let paramIndex = 1
+
+    // Add search filter
+    if (search) {
+      sqlQuery += ` AND (
+        o.order_number ILIKE $${paramIndex} OR
+        u.email ILIKE $${paramIndex} OR
+        u.first_name ILIKE $${paramIndex} OR
+        u.last_name ILIKE $${paramIndex} OR
+        CONCAT(u.first_name, ' ', u.last_name) ILIKE $${paramIndex}
+      )`
+      queryParams.push(`%${search}%`)
+      paramIndex++
     }
 
-    queryText += ` ORDER BY created_at DESC LIMIT $${paramCounter++} OFFSET $${paramCounter++}`;
-    queryParams.push(limit, offset);
-
-    const ordersResult = await query(queryText, queryParams);
-
-    // Get total count
-    let countQueryText = "SELECT COUNT(*) FROM orders";
-    const countQueryParams: any[] = [];
-    paramCounter = 1;
-
+    // Add status filter
     if (status) {
-      countQueryText += " WHERE status = $1";
-      countQueryParams.push(status);
+      sqlQuery += ` AND o.status = $${paramIndex}`
+      queryParams.push(status)
+      paramIndex++
     }
 
-    const countResult = await query(countQueryText, countQueryParams);
-    const total = Number.parseInt(countResult.rows[0].count, 10);
+    // Add payment status filter
+    if (payment_status) {
+      sqlQuery += ` AND o.payment_status = $${paramIndex}`
+      queryParams.push(payment_status)
+      paramIndex++
+    }
 
-    const orders = [];
+    // Add date range filters
+    if (start_date) {
+      sqlQuery += ` AND o.created_at >= $${paramIndex}`
+      queryParams.push(new Date(start_date as string))
+      paramIndex++
+    }
 
-    for (const order of ordersResult.rows) {
-      // Get order items
-      const itemsResult = await query(
-        `
-       SELECT oi.*, p.name as product_name, p.price as product_price, 
-       (SELECT image_url FROM product_images WHERE product_id = oi.product_id AND is_primary = true LIMIT 1) as product_image
-       FROM order_items oi
-       JOIN products p ON oi.product_id = p.id
-       WHERE oi.order_id = $1
-       `,
-        [order.id]
-      );
+    if (end_date) {
+      sqlQuery += ` AND o.created_at <= $${paramIndex}`
+      queryParams.push(new Date(end_date as string))
+      paramIndex++
+    }
 
-      orders.push({
+    // Count total records for pagination
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM (${sqlQuery}) as filtered_orders
+    `
+    const countResult = await query(countQuery, queryParams)
+    const total = Number.parseInt(countResult.rows[0].total)
+
+    // Add pagination
+    const offset = (Number(page) - 1) * Number(limit)
+    sqlQuery += ` ORDER BY o.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`
+    queryParams.push(Number(limit), offset)
+
+    // Execute the query
+    const result = await query(sqlQuery, queryParams)
+
+    // Format the response data
+    const formattedOrders = result.rows.map((order) => {
+      return {
         ...order,
-        items: itemsResult.rows.map((item) => ({
-          ...item,
-          product: {
-            id: item.product_id,
-            name: item.product_name,
-            price: item.product_price,
-            image: item.product_image,
-          },
-        })),
-      });
+        user: {
+          first_name: order.first_name,
+          last_name: order.last_name,
+          email: order.email,
+        },
+      }
+    })
+
+    // Calculate pagination metadata
+    const totalPages = Math.ceil(total / Number(limit))
+
+    return {
+      data: formattedOrders,
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      totalPages,
     }
-
-    return { orders, total };
   } catch (error) {
-    console.error("Error getting all orders:", error);
-    throw error;
+    console.error("Error in getAllOrders model:", error)
+    throw error
   }
-};
+}
 
-export const getOrderByPaymentReference = async (
-  paymentReference: string
-): Promise<Order | null> => {
+// Get order by payment reference
+export const getOrderByPaymentReference = async (paymentReference: string): Promise<Order | null> => {
   try {
     // First try exact match
-    const result = await query(
-      "SELECT * FROM orders WHERE payment_reference = $1",
-      [paymentReference]
-    );
+    const result = await query("SELECT * FROM orders WHERE payment_reference = $1", [paymentReference])
 
     if (result.rows.length > 0) {
-      return result.rows[0];
+      return result.rows[0]
     }
 
     // If no exact match, try partial match (some systems might store only part of the reference)
-    const partialResult = await query(
-      "SELECT * FROM orders WHERE payment_reference LIKE $1",
-      [`%${paymentReference}%`]
-    );
+    const partialResult = await query("SELECT * FROM orders WHERE payment_reference LIKE $1", [`%${paymentReference}%`])
 
     if (partialResult.rows.length > 0) {
-      console.log(
-        `Found order with partial payment reference match: ${partialResult.rows[0].id}`
-      );
-      return partialResult.rows[0];
+      console.log(`Found order with partial payment reference match: ${partialResult.rows[0].id}`)
+      return partialResult.rows[0]
     }
 
     // Try to extract order number from reference (common format: ORDER-{orderNumber}-{timestamp})
-    const orderIdMatch = paymentReference.match(/ORDER-([^-]+)-/);
+    const orderIdMatch = paymentReference.match(/ORDER-([^-]+)-/)
     if (orderIdMatch && orderIdMatch[1]) {
-      const orderByNumber = await getOrderByOrderNumber(orderIdMatch[1]);
+      const orderByNumber = await getOrderByOrderNumber(orderIdMatch[1])
       if (orderByNumber) {
-        console.log(
-          `Found order by extracted order number: ${orderByNumber.id}`
-        );
-        return orderByNumber;
+        console.log(`Found order by extracted order number: ${orderByNumber.id}`)
+        return orderByNumber
       }
     }
 
-    return null;
+    return null
   } catch (error) {
-    console.error("Error getting order by payment reference:", error);
-    throw error;
+    console.error("Error getting order by payment reference:", error)
+    throw error
   }
-};
+}
+
+// Delete order item
+export const deleteOrderItem = async (orderId: string, itemId: string) => {
+  try {
+    // Begin transaction
+    await query("BEGIN")
+
+    // First, get the item details to calculate order total adjustment
+    const itemResult = await query(`SELECT price, quantity FROM order_items WHERE id = $1 AND order_id = $2`, [
+      itemId,
+      orderId,
+    ])
+
+    if (itemResult.rows.length === 0) {
+      await query("ROLLBACK")
+      return { error: "Order item not found", status: 404 }
+    }
+
+    const item = itemResult.rows[0]
+    const itemTotal = Number.parseFloat(item.price) * item.quantity
+
+    // Delete the order item
+    await query(`DELETE FROM order_items WHERE id = $1 AND order_id = $2`, [itemId, orderId])
+
+    // Update the order's total amount
+    await query(`UPDATE orders SET total_amount = total_amount - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`, [
+      itemTotal,
+      orderId,
+    ])
+
+    // Check if any items remain
+    const remainingItemsResult = await query(`SELECT COUNT(*) as count FROM order_items WHERE order_id = $1`, [orderId])
+
+    const remainingItemsCount = Number.parseInt(remainingItemsResult.rows[0].count)
+
+    // If this was the last item, consider changing order status
+    if (remainingItemsCount === 0) {
+      await query(`UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [orderId])
+    }
+
+    // Commit transaction
+    await query("COMMIT")
+
+    return {
+      success: true,
+      message: "Order item deleted successfully",
+      updatedOrderTotal: remainingItemsCount === 0 ? 0 : null,
+    }
+  } catch (error) {
+    // Rollback transaction on error
+    await query("ROLLBACK")
+    console.error("Error deleting order item:", error)
+    return { error: "Internal server error", status: 500 }
+  }
+}
+
+// Get order details
+export const getOrderDetails = async (orderId: string) => {
+  try {
+    // Get order details
+    const orderResult = await query(
+      `
+      SELECT o.*, 
+             u.first_name, u.last_name, u.email
+      FROM orders o
+      LEFT JOIN users u ON o.user_id = u.id
+      WHERE o.id = $1
+      `,
+      [orderId],
+    )
+
+    if (orderResult.rows.length === 0) {
+      return { error: "Order not found", status: 404 }
+    }
+
+    const order = orderResult.rows[0]
+
+    // Format response with user info
+    const formattedOrder = {
+      ...order,
+      user: {
+        first_name: order.first_name,
+        last_name: order.last_name,
+        email: order.email,
+      },
+    }
+
+    return { order: formattedOrder }
+  } catch (error) {
+    console.error("Error fetching order details:", error)
+    return { error: "Internal server error", status: 500 }
+  }
+}
+
+export const checkOrderExists = async (orderId: string) => {
+  const orderCheck = await query(
+    "SELECT id FROM orders WHERE id = $1",
+    [orderId]
+  )
+  return orderCheck.rows.length > 0
+}
+
+export const updatePaymentStatus = async (orderId: string, paymentStatus: string) => {
+  // Update fields based on payment status
+  let updateFields = "payment_status = $1, updated_at = CURRENT_TIMESTAMP"
+  const queryParams = [paymentStatus, orderId]
+  
+  // If status is changing to 'paid', update payment date
+  if (paymentStatus === 'paid') {
+    updateFields += ", payment_date = CURRENT_TIMESTAMP"
+  }
+
+  // Update order payment status
+  const result = await query(
+    `
+    UPDATE orders 
+    SET ${updateFields}
+    WHERE id = $2
+    RETURNING id, order_number, payment_status, payment_date
+    `,
+    queryParams
+  )
+
+  return result.rows[0]
+},
+
+/**
+ * Get valid payment statuses
+ */
+export const getValidPaymentStatuses = () => {
+  return ['pending', 'paid', 'failed', 'refunded']
+}
+}
+// Delete order
+export const deleteOrder = async (orderId: string) => {
+  try {
+    // Begin transaction
+    await query("BEGIN")
+
+    // Delete order items first (cascade should handle this, but being explicit)
+    await query("DELETE FROM order_items WHERE order_id = $1", [orderId])
+
+    // Delete the order
+    const result = await query("DELETE FROM orders WHERE id = $1 RETURNING *", [orderId])
+
+    // Commit transaction
+    await query("COMMIT")
+
+    if (result.rowCount === 0) {
+      return { error: "Order not found", status: 404 }
+    }
+
+    return { message: "Order deleted successfully" }
+  } catch (error) {
+    // Rollback transaction on error
+    await query("ROLLBACK")
+    console.error("Error deleting order:", error)
+    return { error: "Internal server error", status: 500 }
+  }
+}

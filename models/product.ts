@@ -1,47 +1,5 @@
 import { query } from "../database/connection"
-
-export interface Product {
-  id: number
-  name: string
-  description: string | null
-  price: number
-  category_id: number | null
-  stock_quantity: number
-  created_at: Date
-  updated_at: Date
-}
-
-export interface ProductInput {
-  name: string
-  description?: string
-  price: number
-  category_id?: number
-  stock_quantity?: number
-}
-
-export interface ProductSize {
-  id: number
-  product_id: number
-  size: string
-  stock_quantity: number
-}
-
-export interface ProductImage {
-  id: number
-  product_id: number
-  image_url: string
-  is_primary: boolean
-  width?: number
-  height?: number
-  alt_text?: string
-  created_at: Date
-}
-
-export interface ProductWithDetails extends Product {
-  category_name?: string
-  images: ProductImage[]
-  sizes: ProductSize[]
-}
+import type { ProductInput, ProductSize, ProductImage, ProductWithDetails } from "../types"
 
 export const getAllProducts = async (limit = 50, offset = 0, category_id?: number): Promise<ProductWithDetails[]> => {
   try {
@@ -129,7 +87,13 @@ export const getProductById = async (id: number): Promise<ProductWithDetails | n
 export const createProduct = async (
   productData: ProductInput,
   sizes?: { size: string; stock_quantity: number }[],
-  images?: { image_url: string; is_primary?: boolean; width?: number; height?: number; alt_text?: string }[],
+  images?: {
+    image_url: string
+    is_primary?: boolean
+    width?: number
+    height?: number
+    alt_text?: string
+  }[],
 ): Promise<ProductWithDetails> => {
   try {
     // Start a transaction
@@ -364,37 +328,104 @@ export const setProductImageAsPrimary = async (productId: number, imageId: numbe
   try {
     // Start a transaction
     await query("BEGIN")
-    
+
     // Check if the image exists and belongs to the product
-    const imageCheck = await query(
-      "SELECT id FROM product_images WHERE id = $1 AND product_id = $2",
-      [imageId, productId]
-    )
-    
+    const imageCheck = await query("SELECT id FROM product_images WHERE id = $1 AND product_id = $2", [
+      imageId,
+      productId,
+    ])
+
     if (imageCheck.rows.length === 0) {
       await query("ROLLBACK")
       return false
     }
-    
+
     // Set all images of this product to non-primary
-    await query(
-      "UPDATE product_images SET is_primary = false WHERE product_id = $1",
-      [productId]
-    )
-    
+    await query("UPDATE product_images SET is_primary = false WHERE product_id = $1", [productId])
+
     // Set the specified image as primary
-    await query(
-      "UPDATE product_images SET is_primary = true WHERE id = $1",
-      [imageId]
-    )
-    
+    await query("UPDATE product_images SET is_primary = true WHERE id = $1", [imageId])
+
     // Commit the transaction
     await query("COMMIT")
-    
+
     return true
   } catch (error) {
     await query("ROLLBACK")
     console.error("Error setting product image as primary:", error)
+    throw error
+  }
+}
+
+export const searchProductsByQuery = async (searchQuery: string): Promise<ProductWithDetails[]> => {
+  try {
+    const searchQueryText = `%${searchQuery}%`
+
+    const productsResult = await query(
+      `
+      SELECT p.*, c.name as category_name
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+      WHERE 
+        p.name ILIKE $1 OR
+        p.description ILIKE $1
+      ORDER BY p.created_at DESC
+      LIMIT 50
+      `,
+      [searchQueryText],
+    )
+
+    const products = productsResult.rows
+
+    // Get images and sizes for each product
+    const productsWithDetails: ProductWithDetails[] = []
+
+    for (const product of products) {
+      const imagesResult = await query("SELECT * FROM product_images WHERE product_id = $1 ORDER BY is_primary DESC", [
+        product.id,
+      ])
+
+      const sizesResult = await query("SELECT * FROM product_sizes WHERE product_id = $1", [product.id])
+
+      productsWithDetails.push({
+        ...product,
+        images: imagesResult.rows,
+        sizes: sizesResult.rows,
+      })
+    }
+
+    return productsWithDetails
+  } catch (error) {
+    console.error("Error searching products:", error)
+    throw error
+  }
+}
+
+export const addProductSize = async (
+  product_id: number,
+  size: string,
+  stock_quantity: number,
+): Promise<ProductSize> => {
+  try {
+    // Check if the size already exists for this product
+    const existingSize = await query("SELECT * FROM product_sizes WHERE product_id = $1 AND size = $2", [
+      product_id,
+      size,
+    ])
+
+    if (existingSize.rows.length > 0) {
+      throw new Error("Size already exists for this product")
+    }
+
+    // Insert new size
+    const result = await query(
+      "INSERT INTO product_sizes (product_id, size, stock_quantity) VALUES ($1, $2, $3) RETURNING *",
+      [product_id, size, stock_quantity],
+    )
+
+    return result.rows[0]
+  } catch (error) {
+    console.error("Error adding product size:", error)
     throw error
   }
 }
@@ -421,83 +452,6 @@ export const addProductImageByUrl = async (
     return result.rows[0]
   } catch (error) {
     console.error("Error adding product image by URL:", error)
-    throw error
-  }
-}
-
-export const searchProductsByQuery = async (searchQuery: string): Promise<ProductWithDetails[]> => {
-  try {
-    const searchQueryText = `%${searchQuery}%`
-    
-    const productsResult = await query(
-      `
-      SELECT p.*, c.name as category_name
-      FROM products p
-      LEFT JOIN categories c ON p.category_id = c.id
-      WHERE 
-        p.name ILIKE $1 OR
-        p.description ILIKE $1
-      ORDER BY p.created_at DESC
-      LIMIT 50
-      `,
-      [searchQueryText]
-    )
-    
-    const products = productsResult.rows
-
-    // Get images and sizes for each product
-    const productsWithDetails: ProductWithDetails[] = []
-
-    for (const product of products) {
-      const imagesResult = await query(
-        "SELECT * FROM product_images WHERE product_id = $1 ORDER BY is_primary DESC", 
-        [product.id]
-      )
-
-      const sizesResult = await query(
-        "SELECT * FROM product_sizes WHERE product_id = $1", 
-        [product.id]
-      )
-
-      productsWithDetails.push({
-        ...product,
-        images: imagesResult.rows,
-        sizes: sizesResult.rows,
-      })
-    }
-
-    return productsWithDetails
-  } catch (error) {
-    console.error("Error searching products:", error)
-    throw error
-  }
-}
-
-export const addProductSize = async (
-  product_id: number,
-  size: string,
-  stock_quantity: number
-): Promise<ProductSize> => {
-  try {
-    // Check if the size already exists for this product
-    const existingSize = await query(
-      "SELECT * FROM product_sizes WHERE product_id = $1 AND size = $2",
-      [product_id, size]
-    )
-
-    if (existingSize.rows.length > 0) {
-      throw new Error("Size already exists for this product")
-    }
-
-    // Insert new size
-    const result = await query(
-      "INSERT INTO product_sizes (product_id, size, stock_quantity) VALUES ($1, $2, $3) RETURNING *",
-      [product_id, size, stock_quantity]
-    )
-    
-    return result.rows[0]
-  } catch (error) {
-    console.error("Error adding product size:", error)
     throw error
   }
 }

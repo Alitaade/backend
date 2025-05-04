@@ -1,5 +1,5 @@
-import { query } from "@/database/connection"
-import type { Category, CategoryInput } from "@/types"
+import { query } from "../database/connection"
+import type { Category, CategoryInput } from "../types"
 
 export const getAllCategories = async (): Promise<Category[]> => {
   try {
