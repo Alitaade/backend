@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next"
-import { deleteImage } from "../../../../../../../controllers/product-controller"
-import { requireAdmin, enableCors } from "../../../../../../../middleware/auth-middleware"
+import { deleteImage } from "@/controllers/product-controller"
+import { requireAdmin, enableCors } from "@/middleware/auth-middleware"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   enableCors(req, res, async () => {
