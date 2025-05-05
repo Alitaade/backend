@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next"
-import { addSize } from "../../../../../controllers/product-controller"
+import { updateSize } from "@/controllers/product-controller"
 import { enableCors, requireAdmin } from "../../../../../middleware/auth-middleware"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -9,7 +9,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Admin only - add a size to a product
       return new Promise<void>((resolve) => {
         requireAdmin(req, res, () => {
-          addSize(req, res).finally(() => resolve())
+          updateSize(req, res).finally(() => resolve())
         })
       })
 
