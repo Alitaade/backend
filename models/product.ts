@@ -1,8 +1,21 @@
 import { query } from "../database/connection"
 import type { ProductInput, ProductSize, ProductImage, ProductWithDetails } from "../types"
 
-export const getAllProducts = async (limit = 50, offset = 0, category_id?: number): Promise<ProductWithDetails[]> => {
+export const getAllProducts = async (
+  limit = 1000, // Setting a high default limit to get all products
+  offset = 0,
+  category_id?: number,
+  sort = "id",
+  order = "asc",
+): Promise<ProductWithDetails[]> => {
   try {
+    // Validate sort field to prevent SQL injection
+    const validSortFields = ["id", "name", "price", "created_at", "stock_quantity"]
+    const sortField = validSortFields.includes(sort) ? sort : "id"
+
+    // Validate order direction
+    const orderDirection = order.toLowerCase() === "desc" ? "DESC" : "ASC"
+
     let queryText = `
       SELECT p.*, c.name as category_name
       FROM products p
@@ -17,7 +30,7 @@ export const getAllProducts = async (limit = 50, offset = 0, category_id?: numbe
       queryParams.push(category_id)
     }
 
-    queryText += ` ORDER BY p.created_at DESC LIMIT $${paramCounter++} OFFSET $${paramCounter++}`
+    queryText += ` ORDER BY p.${sortField} ${orderDirection} LIMIT $${paramCounter++} OFFSET $${paramCounter++}`
     queryParams.push(limit, offset)
 
     const productsResult = await query(queryText, queryParams)
@@ -43,6 +56,82 @@ export const getAllProducts = async (limit = 50, offset = 0, category_id?: numbe
     return productsWithDetails
   } catch (error) {
     console.error("Error getting all products:", error)
+    throw error
+  }
+}
+
+// Add a function to get all products without pagination
+export const getAllProductsWithoutPagination = async (
+  category_id?: number,
+  sort = "id",
+  order = "asc",
+): Promise<ProductWithDetails[]> => {
+  try {
+    // Validate sort field to prevent SQL injection
+    const validSortFields = ["id", "name", "price", "created_at", "stock_quantity"]
+    const sortField = validSortFields.includes(sort) ? sort : "id"
+
+    // Validate order direction
+    const orderDirection = order.toLowerCase() === "desc" ? "DESC" : "ASC"
+
+    let queryText = `
+      SELECT p.*, c.name as category_name
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+    `
+
+    const queryParams: any[] = []
+    let paramCounter = 1
+
+    if (category_id) {
+      queryText += ` WHERE p.category_id = $${paramCounter++}`
+      queryParams.push(category_id)
+    }
+
+    queryText += ` ORDER BY p.${sortField} ${orderDirection}`
+
+    const productsResult = await query(queryText, queryParams)
+    const products = productsResult.rows
+
+    // Get images and sizes for each product
+    const productsWithDetails: ProductWithDetails[] = []
+
+    for (const product of products) {
+      const imagesResult = await query("SELECT * FROM product_images WHERE product_id = $1 ORDER BY is_primary DESC", [
+        product.id,
+      ])
+
+      const sizesResult = await query("SELECT * FROM product_sizes WHERE product_id = $1", [product.id])
+
+      productsWithDetails.push({
+        ...product,
+        images: imagesResult.rows,
+        sizes: sizesResult.rows,
+      })
+    }
+
+    return productsWithDetails
+  } catch (error) {
+    console.error("Error getting all products:", error)
+    throw error
+  }
+}
+
+// Rest of the code remains the same...
+export const countProducts = async (category_id?: number): Promise<number> => {
+  try {
+    let queryText = "SELECT COUNT(*) as total FROM products"
+    const queryParams: any[] = []
+
+    if (category_id) {
+      queryText += " WHERE category_id = $1"
+      queryParams.push(category_id)
+    }
+
+    const result = await query(queryText, queryParams)
+    return Number.parseInt(result.rows[0].total, 10)
+  } catch (error) {
+    console.error("Error counting products:", error)
     throw error
   }
 }

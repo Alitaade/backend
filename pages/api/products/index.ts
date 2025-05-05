@@ -1,3 +1,5 @@
+// Let's fix the API endpoint to properly handle pagination and not limit to products starting from ID 71
+
 import type { NextApiRequest, NextApiResponse } from "next"
 import { createNewProduct, getProducts } from "../../../controllers/product-controller"
 import { requireAdmin, enableCors } from "../../../middleware/auth-middleware"
@@ -45,10 +47,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return await getProducts(req, res)
     }
 
-    // Fallback for unsupported methodssss
+    // Fallback for unsupported methods
     res.setHeader("Allow", ["GET", "POST", "OPTIONS"])
     return res.status(405).json({ error: "Method not allowed" })
-
   } catch (error) {
     console.error("Unhandled error in products handler:", error)
     return res.status(500).json({ error: "Internal server error" })
