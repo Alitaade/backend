@@ -2,7 +2,7 @@ import { query } from "../database/connection"
 import type { ProductInput, ProductSize, ProductImage, ProductWithDetails } from "../types"
 
 export const getAllProducts = async (
-  limit = 1000, // Setting a high default limit to get all products
+  limit = 10000, // Setting a very high default limit to effectively get all products
   offset = 0,
   category_id?: number,
   sort = "id",

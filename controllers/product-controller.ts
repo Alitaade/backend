@@ -26,10 +26,26 @@ export const config = {
   },
 };
 
-
 export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
-    const { limit = "10", offset = "0", category_id, sort = "id", order = "asc", page = "1" } = req.query
+    const { limit = "10", offset = "0", category_id, sort = "id", order = "asc", page = "1", all = "" } = req.query
+
+    // If the "all" parameter is provided, get all products without pagination
+    if (all === "true") {
+      const products = await getAllProductsWithoutPagination(
+        category_id ? Number.parseInt(category_id as string) : undefined,
+        sort as string,
+        order as string,
+      )
+
+      return res.status(200).json({
+        products,
+        page: 1,
+        limit: products.length,
+        total: products.length,
+        totalPages: 1,
+      })
+    }
 
     // Calculate offset based on page if provided
     const pageNum = Number.parseInt(page as string, 10)
@@ -44,8 +60,8 @@ export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => 
       order as string,
     )
 
-    // Calculate pagination info
-    const totalCount = await getTotalProductCount(category_id ? Number.parseInt(category_id as string) : undefined)
+    // Get total count for pagination
+    const totalCount = await countProducts(category_id ? Number.parseInt(category_id as string) : undefined)
     const totalPages = Math.ceil(totalCount / limitNum)
 
     return res.status(200).json({
@@ -59,13 +75,6 @@ export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => 
     console.error("Error getting products:", error)
     return res.status(500).json({ error: "Internal server error" })
   }
-}
-
-// Helper function to get total product count
-const getTotalProductCount = async (categoryId?: number): Promise<number> => {
-  // Implement this function to count total products
-  // This is a placeholder - you'll need to implement the actual database query
-  return 100
 }
   export const getProduct = async (req: NextApiRequest, res: NextApiResponse) => {
     try {
@@ -296,143 +305,70 @@ const getTotalProductCount = async (categoryId?: number): Promise<number> => {
     }
   }
   
-  export const addMultipleImages = async (req: NextApiRequest, res: NextApiResponse) => {
-    return new Promise<void>(async (resolve) => {
-      try {
-        const { id } = req.query
-  
-        if (!id) {
-          res.status(400).json({ error: "Product ID is required" })
-          return resolve()
+  // New method to handle base64 images directly
+export const addMultipleImages = async (req: NextApiRequest, res: NextApiResponse) => {
+  try {
+    const { id } = req.query
+    const { base64Images, imageUrls, isPrimary, altText } = req.body
+
+    if (!id) {
+      return res.status(400).json({ error: "Product ID is required" })
+    }
+
+    const productId = Number.parseInt(id as string)
+    const uploadedFiles: any[] = []
+    const uploadedUrls: any[] = []
+    const errors: string[] = []
+
+    // Process base64 images if provided
+    if (base64Images && Array.isArray(base64Images) && base64Images.length > 0) {
+      for (let i = 0; i < base64Images.length; i++) {
+        try {
+          const image = await addProductImage(
+            productId,
+            base64Images[i],
+            i === 0 && isPrimary, // Only first image is primary if isPrimary is true
+            undefined, // width
+            undefined, // height
+            altText || `Image of product ${productId}`,
+          )
+          uploadedFiles.push(image)
+        } catch (error) {
+          console.error(`Error processing base64 image:`, error)
+          errors.push(`Failed to process base64 image: ${error.message}`)
         }
-  
-        const productId = Number.parseInt(id as string)
-  
-        // Create upload directory if it doesn't exist
-        const uploadDir = path.join(process.cwd(), "uploads")
-        if (!fs.existsSync(uploadDir)) {
-          fs.mkdirSync(uploadDir, { recursive: true })
-        }
-  
-        const form = formidable({
-          multiples: true,
-          uploadDir,
-          keepExtensions: true,
-          maxFileSize: 10 * 1024 * 1024, // 10MB
-        })
-  
-        form.parse(req, async (err, fields, files) => {
-          if (err) {
-            console.error("Error parsing form:", err)
-            res.status(500).json({ error: "Error processing upload" })
-            return resolve()
-          }
-  
-          try {
-            const isPrimary = fields.is_primary === "true"
-            const altText = (fields.alt_text as string) || ""
-  
-            // Handle file uploads
-            const uploadedFiles: any[] = []
-            const errors: string[] = []
-  
-            // Process image files
-            const imageFiles = files.images
-            if (imageFiles) {
-              // Handle multiple files
-              const filesArray = Array.isArray(imageFiles) ? imageFiles : [imageFiles]
-  
-              // If this is a primary image, update all other images to non-primary
-              if (isPrimary && filesArray.length > 0) {
-                // This will be handled in the model function
-              }
-  
-              // Process each file
-              for (let i = 0; i < filesArray.length; i++) {
-                const file = filesArray[i]
-                try {
-                  // Read the file and convert to base64 or upload to cloud storage
-                  // This is a simplified example - in production you'd likely upload to S3/Cloudinary
-                  const fileContent = fs.readFileSync(file.filepath)
-                  const base64Image = `data:${file.mimetype};base64,${fileContent.toString("base64")}`
-  
-                  // Add image to database
-                  const image = await addProductImage(
-                    productId,
-                    base64Image,
-                    i === 0 && isPrimary, // Only first image is primary if isPrimary is true
-                    undefined, // width
-                    undefined, // height
-                    altText || `Image of product ${productId}`,
-                  )
-  
-                  uploadedFiles.push(image)
-  
-                  // Clean up the temp file
-                  fs.unlinkSync(file.filepath)
-                } catch (error) {
-                  console.error(`Error processing file ${file.originalFilename}:`, error)
-                  errors.push(`Failed to process ${file.originalFilename}: ${error.message}`)
-                }
-              }
-            }
-  
-            // Process image URLs if provided
-            const imageUrlsField = fields.image_urls
-            if (imageUrlsField) {
-              try {
-                const imageUrls = JSON.parse(imageUrlsField as string)
-                const uploadedUrls: any[] = []
-  
-                if (Array.isArray(imageUrls) && imageUrls.length > 0) {
-                  for (let i = 0; i < imageUrls.length; i++) {
-                    try {
-                      const image = await addProductImageByUrl(
-                        productId,
-                        imageUrls[i],
-                        i === 0 && isPrimary && uploadedFiles.length === 0, // Only first URL is primary if isPrimary is true and no files were uploaded
-                      )
-                      uploadedUrls.push(image)
-                    } catch (error) {
-                      console.error(`Error processing URL ${imageUrls[i]}:`, error)
-                      errors.push(`Failed to process URL: ${error.message}`)
-                    }
-                  }
-                }
-  
-                res.status(201).json({
-                  message: "Images uploaded successfully",
-                  uploadedFiles,
-                  uploadedUrls,
-                  errors: errors.length > 0 ? errors : undefined,
-                })
-              } catch (error) {
-                console.error("Error parsing image URLs:", error)
-                res.status(400).json({ error: "Invalid image URLs format" })
-              }
-            } else {
-              res.status(201).json({
-                message: "Images uploaded successfully",
-                uploadedFiles,
-                uploadedUrls: [],
-                errors: errors.length > 0 ? errors : undefined,
-              })
-            }
-          } catch (error) {
-            console.error("Error processing uploads:", error)
-            res.status(500).json({ error: "Internal server error" })
-          }
-  
-          resolve()
-        })
-      } catch (error) {
-        console.error("Error in addMultipleImages:", error)
-        res.status(500).json({ error: "Internal server error" })
-        resolve()
       }
+    }
+
+    // Process image URLs if provided
+    if (imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0) {
+      for (let i = 0; i < imageUrls.length; i++) {
+        try {
+          const image = await addProductImageByUrl(
+            productId,
+            imageUrls[i],
+            i === 0 && isPrimary && uploadedFiles.length === 0, // Only first URL is primary if isPrimary is true and no files were uploaded
+          )
+          uploadedUrls.push(image)
+        } catch (error) {
+          console.error(`Error processing URL ${imageUrls[i]}:`, error)
+          errors.push(`Failed to process URL: ${error.message}`)
+        }
+      }
+    }
+
+    return res.status(201).json({
+      message: "Images uploaded successfully",
+      uploadedFiles,
+      uploadedUrls,
+      errors: errors.length > 0 ? errors : undefined,
     })
+  } catch (error) {
+    console.error("Error in addMultipleImages:", error)
+    return res.status(500).json({ error: "Internal server error" })
   }
-  
+}
+
   export const addImageByUrl = async (req: NextApiRequest, res: NextApiResponse) => {
     try {
       const { id } = req.query

@@ -1,14 +1,7 @@
 // pages/api/products/[id]/images/index.ts
-import type { NextApiRequest, NextApiResponse } from "next";
-import { addMultipleImages } from "../../../../../controllers/product-controller";
-import { requireAdmin, enableCors } from "../../../../../middleware/auth-middleware";
-
-// Disable the built-in NextJS body parser for file uploads
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+import type { NextApiRequest, NextApiResponse } from "next"
+import { addMultipleImages } from "../../../../../controllers/product-controller"
+import { requireAdmin, enableCors } from "../../../../../middleware/auth-middleware"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   enableCors(req, res, async () => {
@@ -17,11 +10,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // Admin only - add multiple images to a product
         return new Promise((resolve) => {
           requireAdmin(req, res, () => {
-            addMultipleImages(req, res).finally(() => resolve());
-          });
-        });
+            addMultipleImages(req, res).finally(() => resolve())
+          })
+        })
       default:
-        return res.status(405).json({ error: "Method not allowed" });
+        return res.status(405).json({ error: "Method not allowed" })
     }
-  });
+  })
 }
