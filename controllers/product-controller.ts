@@ -1,11 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import {
   getAllProducts,
+  getAllProductsWithoutPagination,
   getProductById,
   createProduct,
   updateProduct,
   deleteProduct,
   addProductImage,
+  countProducts,
   deleteProductImage,
   updateProductSize,
   deleteProductSize,
