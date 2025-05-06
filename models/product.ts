@@ -145,6 +145,7 @@ export const countProducts = async (category_id?: number): Promise<number> => {
     throw error
   }
 }
+
 export const getProductById = async (id: number): Promise<ProductWithDetails | null> => {
   try {
     const productResult = await query(
