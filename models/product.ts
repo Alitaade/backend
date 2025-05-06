@@ -1,7 +1,101 @@
 import { query } from "../database/connection"
 import type { ProductInput, ProductSize, ProductImage, ProductWithDetails } from "../types"
 
-// Updated getAllProducts to ensure proper pagination
+
+// Optimized version of the product controller to avoid timeouts
+
+export const getAllProductsWithoutPagination = async (
+  category_id?: number,
+  sort = "id",
+  order = "asc",
+): Promise<ProductWithDetails[]> => {
+  try {
+    // Validate sort field to prevent SQL injection
+    const validSortFields = ["id", "name", "price", "created_at", "stock_quantity"]
+    const sortField = validSortFields.includes(sort) ? sort : "id"
+
+    // Validate order direction
+    const orderDirection = order.toLowerCase() === "desc" ? "DESC" : "ASC"
+
+    // First, fetch all products in a single query
+    let productsQueryText = `
+      SELECT p.*, c.name as category_name
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+    `
+
+    const queryParams: any[] = []
+    let paramCounter = 1
+
+    if (category_id) {
+      productsQueryText += ` WHERE p.category_id = $${paramCounter++}`
+      queryParams.push(category_id)
+    }
+
+    productsQueryText += ` ORDER BY p.${sortField} ${orderDirection}`
+    
+    console.log("Executing products query:", productsQueryText, "with params:", queryParams)
+    const productsResult = await query(productsQueryText, queryParams)
+    const products = productsResult.rows
+    console.log(`Products query returned ${products.length} products`)
+
+    if (products.length === 0) {
+      return []
+    }
+
+    // Extract all product IDs
+    const productIds = products.map(p => p.id)
+    
+    // Get all images for these products in a single query
+    const imagesQuery = `
+      SELECT * FROM product_images 
+      WHERE product_id = ANY($1::int[])
+      ORDER BY product_id, is_primary DESC
+    `
+    const imagesResult = await query(imagesQuery, [productIds])
+    
+    // Get all sizes for these products in a single query
+    const sizesQuery = `
+      SELECT * FROM product_sizes
+      WHERE product_id = ANY($1::int[])
+      ORDER BY product_id
+    `
+    const sizesResult = await query(sizesQuery, [productIds])
+    
+    console.log(`Retrieved ${imagesResult.rows.length} images and ${sizesResult.rows.length} sizes in bulk`)
+
+    // Create a map for quick lookup
+    const imagesMap = new Map()
+    imagesResult.rows.forEach(img => {
+      if (!imagesMap.has(img.product_id)) {
+        imagesMap.set(img.product_id, [])
+      }
+      imagesMap.get(img.product_id).push(img)
+    })
+    
+    const sizesMap = new Map()
+    sizesResult.rows.forEach(size => {
+      if (!sizesMap.has(size.product_id)) {
+        sizesMap.set(size.product_id, [])
+      }
+      sizesMap.get(size.product_id).push(size)
+    })
+
+    // Combine everything into the final result
+    const productsWithDetails: ProductWithDetails[] = products.map(product => ({
+      ...product,
+      images: imagesMap.get(product.id) || [],
+      sizes: sizesMap.get(product.id) || [],
+    }))
+
+    return productsWithDetails
+  } catch (error) {
+    console.error("Error getting all products:", error)
+    throw error
+  }
+}
+
+// Similarly optimize the paginated version of getAllProducts
 export const getAllProducts = async (
   limit = 10,
   offset = 0,
@@ -31,8 +125,6 @@ export const getAllProducts = async (
       queryParams.push(category_id)
     }
 
-    // Remove any potential ID filtering that might be limiting results
-    // and ensure proper pagination with LIMIT and OFFSET
     queryText += ` ORDER BY p.${sortField} ${orderDirection} LIMIT $${paramCounter++} OFFSET $${paramCounter++}`
     queryParams.push(limit, offset)
 
@@ -42,22 +134,52 @@ export const getAllProducts = async (
     const products = productsResult.rows
     console.log(`Query returned ${products.length} products for page`)
 
-    // Get images and sizes for each product
-    const productsWithDetails: ProductWithDetails[] = []
-
-    for (const product of products) {
-      const imagesResult = await query("SELECT * FROM product_images WHERE product_id = $1 ORDER BY is_primary DESC", [
-        product.id,
-      ])
-
-      const sizesResult = await query("SELECT * FROM product_sizes WHERE product_id = $1", [product.id])
-
-      productsWithDetails.push({
-        ...product,
-        images: imagesResult.rows,
-        sizes: sizesResult.rows,
-      })
+    if (products.length === 0) {
+      return []
     }
+
+    // Extract all product IDs
+    const productIds = products.map(p => p.id)
+    
+    // Get all images for these products in a single query
+    const imagesQuery = `
+      SELECT * FROM product_images 
+      WHERE product_id = ANY($1::int[])
+      ORDER BY product_id, is_primary DESC
+    `
+    const imagesResult = await query(imagesQuery, [productIds])
+    
+    // Get all sizes for these products in a single query
+    const sizesQuery = `
+      SELECT * FROM product_sizes
+      WHERE product_id = ANY($1::int[])
+      ORDER BY product_id
+    `
+    const sizesResult = await query(sizesQuery, [productIds])
+
+    // Create a map for quick lookup
+    const imagesMap = new Map()
+    imagesResult.rows.forEach(img => {
+      if (!imagesMap.has(img.product_id)) {
+        imagesMap.set(img.product_id, [])
+      }
+      imagesMap.get(img.product_id).push(img)
+    })
+    
+    const sizesMap = new Map()
+    sizesResult.rows.forEach(size => {
+      if (!sizesMap.has(size.product_id)) {
+        sizesMap.set(size.product_id, [])
+      }
+      sizesMap.get(size.product_id).push(size)
+    })
+
+    // Combine everything into the final result
+    const productsWithDetails: ProductWithDetails[] = products.map(product => ({
+      ...product,
+      images: imagesMap.get(product.id) || [],
+      sizes: sizesMap.get(product.id) || [],
+    }))
 
     return productsWithDetails
   } catch (error) {
@@ -66,66 +188,7 @@ export const getAllProducts = async (
   }
 }
 
-// Updated to ensure no ID filtering occurs
-export const getAllProductsWithoutPagination = async (
-  category_id?: number,
-  sort = "id",
-  order = "asc",
-): Promise<ProductWithDetails[]> => {
-  try {
-    // Validate sort field to prevent SQL injection
-    const validSortFields = ["id", "name", "price", "created_at", "stock_quantity"]
-    const sortField = validSortFields.includes(sort) ? sort : "id"
-
-    // Validate order direction
-    const orderDirection = order.toLowerCase() === "desc" ? "DESC" : "ASC"
-
-    let queryText = `
-      SELECT p.*, c.name as category_name
-      FROM products p
-      LEFT JOIN categories c ON p.category_id = c.id
-    `
-
-    const queryParams: any[] = []
-    let paramCounter = 1
-
-    if (category_id) {
-      queryText += ` WHERE p.category_id = $${paramCounter++}`
-      queryParams.push(category_id)
-    }
-
-    queryText += ` ORDER BY p.${sortField} ${orderDirection}`
-    // No LIMIT clause for "all" mode
-
-    console.log("Executing query:", queryText, "with params:", queryParams)
-    
-    const productsResult = await query(queryText, queryParams)
-    const products = productsResult.rows
-    console.log(`Query returned ${products.length} products`)
-
-    // Get images and sizes for each product
-    const productsWithDetails: ProductWithDetails[] = []
-
-    for (const product of products) {
-      const imagesResult = await query("SELECT * FROM product_images WHERE product_id = $1 ORDER BY is_primary DESC", [
-        product.id,
-      ])
-
-      const sizesResult = await query("SELECT * FROM product_sizes WHERE product_id = $1", [product.id])
-
-      productsWithDetails.push({
-        ...product,
-        images: imagesResult.rows,
-        sizes: sizesResult.rows,
-      })
-    }
-
-    return productsWithDetails
-  } catch (error) {
-    console.error("Error getting all products:", error)
-    throw error
-  }
-}
+// Keep the countProducts function as is
 export const countProducts = async (category_id?: number): Promise<number> => {
   try {
     let queryText = "SELECT COUNT(*) as total FROM products"
