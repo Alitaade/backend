@@ -173,3 +173,98 @@ export const ensureImageDimensions = (
     height: dimensions.height,
   }
 }
+
+// New function to optimize base64 image data
+export const optimizeBase64Image = async (
+  base64Data: string, 
+  maxWidth = 1200, 
+  quality = 80
+): Promise<string> => {
+  // If it's not a base64 image, return as is
+  if (!base64Data.startsWith('data:image/')) {
+    return base64Data;
+  }
+
+  try {
+    // For server-side processing, we'd use Sharp
+    // But for client-side, we'll use the browser's Canvas API
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        // Calculate new dimensions while maintaining aspect ratio
+        let width = img.width;
+        let height = img.height;
+        
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+        
+        // Create canvas and draw image
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Could not get canvas context'));
+          return;
+        }
+        
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Get optimized data URL
+        const optimizedBase64 = canvas.toDataURL('image/jpeg', quality / 100);
+        resolve(optimizedBase64);
+      };
+      
+      img.onerror = () => {
+        reject(new Error('Failed to load image'));
+      };
+      
+      img.src = base64Data;
+    });
+  } catch (error) {
+    console.error('Error optimizing base64 image:', error);
+    return base64Data; // Return original on error
+  }
+}
+
+// Function to process images in chunks
+export const processImagesInChunks = async <T>(
+  items: T[],
+  processFn: (item: T) => Promise<any>,
+  chunkSize = 3,
+  onProgress?: (processed: number, total: number) => void
+): Promise<any[]> => {
+  const results: any[] = [];
+  const total = items.length;
+  let processed = 0;
+  
+  // Process in chunks
+  for (let i = 0; i < total; i += chunkSize) {
+    const chunk = items.slice(i, i + chunkSize);
+    
+    // Process current chunk in parallel
+    const chunkResults = await Promise.all(
+      chunk.map(async (item) => {
+        try {
+          return await processFn(item);
+        } catch (error) {
+          console.error('Error processing item:', error);
+          return null;
+        } finally {
+          processed++;
+          if (onProgress) {
+            onProgress(processed, total);
+          }
+        }
+      })
+    );
+    
+    // Add results from this chunk
+    results.push(...chunkResults.filter(r => r !== null));
+  }
+  
+  return results;
+}

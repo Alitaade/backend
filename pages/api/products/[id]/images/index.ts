@@ -3,6 +3,16 @@ import type { NextApiRequest, NextApiResponse } from "next"
 import { addMultipleImages } from "../../../../../controllers/product-controller"
 import { requireAdmin, enableCors } from "../../../../../middleware/auth-middleware"
 
+// Set a longer timeout for this specific route
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: "10mb", // Increase size limit for image uploads
+    },
+    responseLimit: false, // No response size limit
+  },
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   enableCors(req, res, async () => {
     switch (req.method) {
