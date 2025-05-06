@@ -10,7 +10,7 @@ const pool = new Pool({
   max: 20, // Reduced from 50 to avoid connection overload
   idleTimeoutMillis: 30000, // Reduced to 30 seconds
   connectionTimeoutMillis: 5000, // 5 seconds connection timeout
-  statement_timeout: 10000, // 10 seconds query timeout
+  // statement_timeout removed from here - will be set at session level
 });
 
 // Add event listeners for connection issues
@@ -26,6 +26,9 @@ export const query = async (text: string, params?: any[]) => {
   try {
     // Get client from pool instead of using pool.query directly
     client = await pool.connect();
+    
+    // Set statement timeout at the session level
+    await client.query('SET statement_timeout = 10000');
     
     // Use parameterized queries to prevent SQL injection
     const res = await client.query(text, params);
