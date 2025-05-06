@@ -15,17 +15,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    // Check for query parameter issues and fix them
+    const originalQuery = { ...req.query };
+    console.log("Original request query:", originalQuery);
+    
+    // Fix for potential nested param formats like params[all] instead of all
+    if (req.query['params[all]'] === 'true') {
+      req.query.all = 'true';
+      delete req.query['params[all]'];
+    }
+
+    // Handle different ways "all" might be passed
+    if (req.query.all === '' || req.query.all === 'true') {
+      req.query.all = 'true';
+    }
+    
     // Normalize query param: map ?category= to category_id
     if (req.query.category && !req.query.category_id) {
       req.query.category_id = req.query.category
     }
     
-    // Log all request parameters to help with debugging
-    console.log("API Request:", {
-      method: req.method,
-      query: req.query,
-      url: req.url
-    })
+    // Log fixed request parameters
+    console.log("Fixed request query:", req.query);
 
     // Handle POST request: Protected route
     if (req.method === "POST") {
@@ -49,12 +60,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Handle GET request: Public
     if (req.method === "GET") {
-      // Make sure we're handling 'all' parameter correctly
-      if (req.query.all === "true" || req.query.all === "") {
-        console.log("Request for ALL products detected")
-        req.query.all = "true" // Ensure it's consistently set as a string
-      }
-      
       return await getProducts(req, res)
     }
 
