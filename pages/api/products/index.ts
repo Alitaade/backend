@@ -1,5 +1,3 @@
-// Let's fix the API endpoint to properly handle pagination and not limit to products starting from ID 71
-
 import type { NextApiRequest, NextApiResponse } from "next"
 import { createNewProduct, getProducts } from "../../../controllers/product-controller"
 import { requireAdmin, enableCors } from "../../../middleware/auth-middleware"
@@ -21,6 +19,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.query.category && !req.query.category_id) {
       req.query.category_id = req.query.category
     }
+    
+    // Log all request parameters to help with debugging
+    console.log("API Request:", {
+      method: req.method,
+      query: req.query,
+      url: req.url
+    })
 
     // Handle POST request: Protected route
     if (req.method === "POST") {
@@ -44,6 +49,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Handle GET request: Public
     if (req.method === "GET") {
+      // Make sure we're handling 'all' parameter correctly
+      if (req.query.all === "true" || req.query.all === "") {
+        console.log("Request for ALL products detected")
+        req.query.all = "true" // Ensure it's consistently set as a string
+      }
+      
       return await getProducts(req, res)
     }
 

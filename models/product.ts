@@ -1,8 +1,9 @@
 import { query } from "../database/connection"
 import type { ProductInput, ProductSize, ProductImage, ProductWithDetails } from "../types"
 
+// Updated getAllProducts to ensure proper pagination
 export const getAllProducts = async (
-  limit = 10000, // Setting a very high default limit to effectively get all products
+  limit = 10,
   offset = 0,
   category_id?: number,
   sort = "id",
@@ -30,11 +31,16 @@ export const getAllProducts = async (
       queryParams.push(category_id)
     }
 
+    // Remove any potential ID filtering that might be limiting results
+    // and ensure proper pagination with LIMIT and OFFSET
     queryText += ` ORDER BY p.${sortField} ${orderDirection} LIMIT $${paramCounter++} OFFSET $${paramCounter++}`
     queryParams.push(limit, offset)
 
+    console.log("Executing paginated query:", queryText, "with params:", queryParams)
+    
     const productsResult = await query(queryText, queryParams)
     const products = productsResult.rows
+    console.log(`Query returned ${products.length} products for page`)
 
     // Get images and sizes for each product
     const productsWithDetails: ProductWithDetails[] = []
@@ -55,12 +61,12 @@ export const getAllProducts = async (
 
     return productsWithDetails
   } catch (error) {
-    console.error("Error getting all products:", error)
+    console.error("Error getting paginated products:", error)
     throw error
   }
 }
 
-// Add a function to get all products without pagination
+// Updated to ensure no ID filtering occurs
 export const getAllProductsWithoutPagination = async (
   category_id?: number,
   sort = "id",
@@ -89,10 +95,13 @@ export const getAllProductsWithoutPagination = async (
     }
 
     queryText += ` ORDER BY p.${sortField} ${orderDirection}`
-    // No LIMIT clause here
+    // No LIMIT clause for "all" mode
 
+    console.log("Executing query:", queryText, "with params:", queryParams)
+    
     const productsResult = await query(queryText, queryParams)
     const products = productsResult.rows
+    console.log(`Query returned ${products.length} products`)
 
     // Get images and sizes for each product
     const productsWithDetails: ProductWithDetails[] = []
@@ -117,8 +126,6 @@ export const getAllProductsWithoutPagination = async (
     throw error
   }
 }
-
-// Rest of the code remains the same...
 export const countProducts = async (category_id?: number): Promise<number> => {
   try {
     let queryText = "SELECT COUNT(*) as total FROM products"
@@ -130,13 +137,14 @@ export const countProducts = async (category_id?: number): Promise<number> => {
     }
 
     const result = await query(queryText, queryParams)
-    return Number.parseInt(result.rows[0].total, 10)
+    const total = Number.parseInt(result.rows[0].total, 10)
+    console.log(`Total product count: ${total}${category_id ? ` for category ${category_id}` : ''}`)
+    return total
   } catch (error) {
     console.error("Error counting products:", error)
     throw error
   }
 }
-
 export const getProductById = async (id: number): Promise<ProductWithDetails | null> => {
   try {
     const productResult = await query(

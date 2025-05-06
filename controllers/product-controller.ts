@@ -53,6 +53,7 @@ const UPLOADS_DIR =
 
 // Initialize uploads directory
 ensureDir(UPLOADS_DIR)
+// Updated product controller with fixes for the pagination issue
 export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     const { 
@@ -64,15 +65,21 @@ export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => 
       page = "1", 
       all = "" 
     } = req.query
+    
+    console.log("Processing product request with params:", { 
+      limit, offset, category_id, sort, order, page, all 
+    })
 
     // If the "all" parameter is provided, get all products without pagination
     if (all === "true") {
+      console.log("Getting ALL products without pagination")
       const products = await getAllProductsWithoutPagination(
         category_id ? Number.parseInt(category_id as string) : undefined,
         sort as string,
         order as string,
       )
 
+      console.log(`Returning ${products.length} products in 'all' mode`)
       return res.status(200).json({
         products,
         page: 1,
@@ -87,10 +94,17 @@ export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => 
     const limitNum = Number.parseInt(limit as string, 10)
     const calculatedOffset = pageNum > 1 ? (pageNum - 1) * limitNum : Number.parseInt(offset as string, 10)
 
-    // Get total count for pagination first
+    console.log("Calculated pagination values:", {
+      pageNum,
+      limitNum, 
+      calculatedOffset
+    })
+
+    // Get total count first for pagination
     const totalCount = await countProducts(category_id ? Number.parseInt(category_id as string) : undefined)
     const totalPages = Math.ceil(totalCount / limitNum)
 
+    // Get paginated products
     const products = await getAllProducts(
       limitNum,
       calculatedOffset,
@@ -99,6 +113,8 @@ export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => 
       order as string,
     )
 
+    console.log(`Returning ${products.length} products (page ${pageNum} of ${totalPages}), total: ${totalCount}`)
+    
     return res.status(200).json({
       products,
       page: pageNum,
