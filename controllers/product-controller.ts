@@ -13,6 +13,7 @@ import {
   addProductImageByUrl,
   searchProductsByQuery,
   getAllProductsWithoutPagination,
+  countProducts,
   addProductSize as addNewProductSize,
 } from "../models/product"
 import { ensureImageDimensions, optimizeBase64Image, 
