@@ -1,7 +1,7 @@
 // Let's create an endpoint for setting an image as primary
 
 import type { NextApiRequest, NextApiResponse } from "next"
-import { setPrimary } from "@/controllers/product-controller"
+import { setPrimaryImage } from "@/controllers/product-controller"
 import { requireAdmin, enableCors } from "@/middleware/auth-middleware"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return new Promise<void>((resolve) => {
         enableCors(req, res, () => {
           requireAdmin(req, res, () => {
-            setPrimary(req, res).finally(() => resolve())
+            setPrimaryImage(req, res).finally(() => resolve())
           })
         })
       })
