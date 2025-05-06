@@ -89,6 +89,7 @@ export const getAllProductsWithoutPagination = async (
     }
 
     queryText += ` ORDER BY p.${sortField} ${orderDirection}`
+    // No LIMIT clause here
 
     const productsResult = await query(queryText, queryParams)
     const products = productsResult.rows
