@@ -476,16 +476,50 @@ export const updateProductSize = async (
   }
 }
 
+
 export const deleteProductSize = async (id: number): Promise<boolean> => {
   try {
-    const result = await query("DELETE FROM product_sizes WHERE id = $1 RETURNING id", [id])
-    return result.rows.length > 0
+    // Start a transaction
+    await query('BEGIN');
+    
+    try {
+      // Get the product size info before deletion
+      const sizeInfo = await query(
+        "SELECT product_id, size FROM product_sizes WHERE id = $1", 
+        [id]
+      );
+      
+      if (sizeInfo.rows.length === 0) {
+        await query('ROLLBACK');
+        return false;
+      }
+      
+      // Delete the size reference in any order_items
+      await query(
+        "DELETE FROM order_items WHERE product_id = $1 AND size = $2",
+        [sizeInfo.rows[0].product_id, sizeInfo.rows[0].size]
+      );
+      
+      // Now delete the size
+      const result = await query(
+        "DELETE FROM product_sizes WHERE id = $1 RETURNING id", 
+        [id]
+      );
+      
+      // Commit the transaction
+      await query('COMMIT');
+      
+      return result.rows.length > 0;
+    } catch (error) {
+      // Rollback in case of error
+      await query('ROLLBACK');
+      throw error;
+    }
   } catch (error) {
-    console.error("Error deleting product size:", error)
-    throw error
+    console.error("Error deleting product size:", error);
+    throw error;
   }
 }
-
 export const setProductImageAsPrimary = async (productId: number, imageId: number): Promise<boolean> => {
   try {
     // Start a transaction
