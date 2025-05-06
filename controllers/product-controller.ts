@@ -53,10 +53,17 @@ const UPLOADS_DIR =
 
 // Initialize uploads directory
 ensureDir(UPLOADS_DIR)
-
 export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
-    const { limit = "10", offset = "0", category_id, sort = "id", order = "asc", page = "1", all = "" } = req.query
+    const { 
+      limit = "10", 
+      offset = "0", 
+      category_id, 
+      sort = "id", 
+      order = "asc", 
+      page = "1", 
+      all = "" 
+    } = req.query
 
     // If the "all" parameter is provided, get all products without pagination
     if (all === "true") {
@@ -80,6 +87,10 @@ export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => 
     const limitNum = Number.parseInt(limit as string, 10)
     const calculatedOffset = pageNum > 1 ? (pageNum - 1) * limitNum : Number.parseInt(offset as string, 10)
 
+    // Get total count for pagination first
+    const totalCount = await countProducts(category_id ? Number.parseInt(category_id as string) : undefined)
+    const totalPages = Math.ceil(totalCount / limitNum)
+
     const products = await getAllProducts(
       limitNum,
       calculatedOffset,
@@ -87,10 +98,6 @@ export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => 
       sort as string,
       order as string,
     )
-
-    // Get total count for pagination
-    const totalCount = await countProducts(category_id ? Number.parseInt(category_id as string) : undefined)
-    const totalPages = Math.ceil(totalCount / limitNum)
 
     return res.status(200).json({
       products,
@@ -104,7 +111,6 @@ export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => 
     return res.status(500).json({ error: "Internal server error" })
   }
 }
-
 export const getProduct = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     const { id } = req.query
