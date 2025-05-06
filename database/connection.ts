@@ -7,9 +7,9 @@ const pool = new Pool({
     process.env.NODE_ENV === "production"
       ? { rejectUnauthorized: true }
       : false,
-  max: 20, // Reduced from 50 to avoid connection overload
+  max: 90, // Reduced from 50 to avoid connection overload
   idleTimeoutMillis: 30000, // Reduced to 30 seconds
-  connectionTimeoutMillis: 5000, // 5 seconds connection timeout
+  connectionTimeoutMillis: 90000, // 5 seconds connection timeout
   // statement_timeout removed from here - will be set at session level
 });
 
