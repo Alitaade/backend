@@ -1,28 +1,61 @@
-import { Pool } from "pg";
+import { Pool, PoolClient } from "pg";
 
-// Create a pool instance to manage database connections
+// Create a pool instance with optimized settings
 const pool = new Pool({
-  connectionString:
-    process.env.DATABASE_URL,
+  connectionString: process.env.DATABASE_URL,
   ssl:
     process.env.NODE_ENV === "production"
       ? { rejectUnauthorized: true }
       : false,
-  max: 50,
-  idleTimeoutMillis: 90000, // 90 seconds idle timeout
+  max: 20, // Reduced from 50 to avoid connection overload
+  idleTimeoutMillis: 30000, // Reduced to 30 seconds
+  connectionTimeoutMillis: 5000, // 5 seconds connection timeout
+  statement_timeout: 10000, // 10 seconds query timeout
 });
 
-// Function to execute SQL queries
+// Add event listeners for connection issues
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle client', err);
+});
+
+// Function to safely execute SQL queries with prepared statements
 export const query = async (text: string, params?: any[]) => {
   const start = Date.now();
+  let client: PoolClient | null = null;
+  
   try {
-    const res = await pool.query(text, params);
+    // Get client from pool instead of using pool.query directly
+    client = await pool.connect();
+    
+    // Use parameterized queries to prevent SQL injection
+    const res = await client.query(text, params);
+    
     const duration = Date.now() - start;
-    console.log("Executed query", { text, duration, rows: res.rowCount });
+    
+    // Only log minimal information in production
+    if (process.env.NODE_ENV !== "production") {
+      console.log("Executed query", { 
+        text: text.substring(0, 80) + (text.length > 80 ? '...' : ''),
+        duration, 
+        rows: res.rowCount 
+      });
+    }
+    
     return res;
   } catch (error) {
-    console.error("Error executing query", { text, error });
+    // Don't expose query text in production logs
+    if (process.env.NODE_ENV === "production") {
+      console.error("Error executing query", { error });
+    } else {
+      console.error("Error executing query", { 
+        text: text.substring(0, 80) + (text.length > 80 ? '...' : ''), 
+        error 
+      });
+    }
     throw error;
+  } finally {
+    // Always release the client back to the pool
+    if (client) client.release();
   }
 };
 
@@ -37,5 +70,11 @@ export const checkConnection = async () => {
     return false;
   }
 };
+
+// Add a shutdown handler to close pool gracefully
+process.on('SIGTERM', () => {
+  console.log('Closing database pool connections');
+  pool.end();
+});
 
 export default pool;
