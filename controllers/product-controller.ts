@@ -596,19 +596,26 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
     if (isMultipart) {
       // Handle file uploads using formidable
       const form = formidable({
-        maxFileSize: 10 * 1024 * 1024, // 10MB limit
+        maxFileSize: 20 * 1024 * 1024, // 20MB limit
         multiples: true,
+        keepExtensions: true,
       })
 
       return new Promise<void>((resolve) => {
         form.parse(req, async (err, fields, files) => {
           if (err) {
             console.error("Error parsing form:", err)
-            res.status(400).json({ error: "Error parsing form data" })
+            res.status(400).json({ error: `Error parsing form data: ${err.message}` })
             return resolve()
           }
 
           try {
+            console.log("Received form data:", {
+              fieldKeys: Object.keys(fields),
+              fileKeys: Object.keys(files),
+              filesCount: files.images ? (Array.isArray(files.images) ? files.images.length : 1) : 0,
+            })
+
             // Get files from the 'images' field (formidable returns an array)
             const imageFiles = files.images || []
             const fileArray = Array.isArray(imageFiles) ? imageFiles : [imageFiles]
@@ -627,14 +634,17 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
             if (imageUrlsField) {
               try {
                 // Parse the JSON string
-                imageUrls = JSON.parse(imageUrlsField as string)
+                imageUrls = JSON.parse(Array.isArray(imageUrlsField) ? imageUrlsField[0] : imageUrlsField)
               } catch (e) {
                 console.warn("Could not parse imageUrls JSON:", e)
               }
             }
 
-            const isPrimary = fields.isPrimary === "true"
-            const altText = (fields.altText as string) || `Image of product ${productId}`
+            const isPrimary =
+              fields.isPrimary === "true" || (Array.isArray(fields.isPrimary) && fields.isPrimary[0] === "true")
+            const altText =
+              (Array.isArray(fields.altText) ? fields.altText[0] : (fields.altText as string)) ||
+              `Image of product ${productId}`
 
             const uploadedFiles = []
             const errors = []
@@ -717,7 +727,7 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
             })
           } catch (error) {
             console.error("Error processing uploaded images:", error)
-            res.status(500).json({ error: "Failed to process uploaded images" })
+            res.status(500).json({ error: `Failed to process uploaded images: ${error.message}` })
           }
 
           return resolve()
@@ -725,7 +735,17 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
       })
     } else {
       // Handle JSON payload with base64 images or URLs
+      if (!req.body) {
+        return res.status(400).json({ error: "Request body is missing" })
+      }
+
       const { base64Images, imageUrls, isPrimary, altText } = req.body
+
+      console.log("Received JSON payload:", {
+        hasBase64: Array.isArray(base64Images) && base64Images.length > 0,
+        hasUrls: Array.isArray(imageUrls) && imageUrls.length > 0,
+        isPrimary,
+      })
 
       // Validate input
       if (
@@ -791,7 +811,7 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
     }
   } catch (error) {
     console.error("Error in addMultipleImages:", error)
-    return res.status(500).json({ error: "Internal server error" })
+    return res.status(500).json({ error: `Internal server error: ${error.message}` })
   }
 }
 
