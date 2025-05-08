@@ -1,3 +1,4 @@
+import sharp from "sharp"
 /**
  * Utility functions for handling images in the e-commerce application
  */
@@ -174,62 +175,75 @@ export const ensureImageDimensions = (
   }
 }
 
-// New function to optimize base64 image data
+// Function to optimize base64 image
 export const optimizeBase64Image = async (
-  base64Data: string, 
-  maxWidth = 1200, 
-  quality = 80
+  base64Data: string,
+  options: {
+    width?: number
+    height?: number
+    quality?: number
+    format?: "jpeg" | "png" | "webp"
+  } = {},
 ): Promise<string> => {
-  // If it's not a base64 image, return as is
-  if (!base64Data.startsWith('data:image/')) {
-    return base64Data;
-  }
-
   try {
-    // For server-side processing, we'd use Sharp
-    // But for client-side, we'll use the browser's Canvas API
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        // Calculate new dimensions while maintaining aspect ratio
-        let width = img.width;
-        let height = img.height;
-        
-        if (width > maxWidth) {
-          height = (height * maxWidth) / width;
-          width = maxWidth;
-        }
-        
-        // Create canvas and draw image
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Could not get canvas context'));
-          return;
-        }
-        
-        ctx.drawImage(img, 0, 0, width, height);
-        
-        // Get optimized data URL
-        const optimizedBase64 = canvas.toDataURL('image/jpeg', quality / 100);
-        resolve(optimizedBase64);
-      };
-      
-      img.onerror = () => {
-        reject(new Error('Failed to load image'));
-      };
-      
-      img.src = base64Data;
-    });
+    // Extract the MIME type and base64 data
+    const matches = base64Data.match(/^data:([A-Za-z-+/]+);base64,(.+)$/)
+
+    if (!matches || matches.length !== 3) {
+      console.warn("Invalid base64 format")
+      return base64Data
+    }
+
+    const mimeType = matches[1]
+    const base64 = matches[2]
+
+    // Convert base64 to buffer
+    const buffer = Buffer.from(base64, "base64")
+
+    // Determine output format
+    let format = options.format || "jpeg"
+    if (mimeType.includes("png") && !options.format) {
+      format = "png"
+    } else if (mimeType.includes("webp") && !options.format) {
+      format = "webp"
+    }
+
+    // Create Sharp instance
+    let sharpInstance = sharp(buffer)
+
+    // Resize if dimensions provided
+    if (options.width || options.height) {
+      sharpInstance = sharpInstance.resize({
+        width: options.width,
+        height: options.height,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+    }
+
+    // Set quality (higher for better quality)
+    const quality = options.quality || 100
+
+    // Process image based on format
+    let outputBuffer
+    if (format === "jpeg") {
+      outputBuffer = await sharpInstance.jpeg({ quality }).toBuffer()
+    } else if (format === "png") {
+      outputBuffer = await sharpInstance.png({ quality }).toBuffer()
+    } else if (format === "webp") {
+      outputBuffer = await sharpInstance.webp({ quality }).toBuffer()
+    }
+
+    // Convert back to base64
+    const optimizedBase64 = `data:image/${format};base64,${outputBuffer.toString("base64")}`
+
+    return optimizedBase64
   } catch (error) {
-    console.error('Error optimizing base64 image:', error);
-    return base64Data; // Return original on error
+    console.error("Error optimizing image:", error)
+    // Return original if optimization fails
+    return base64Data
   }
 }
-
 // Function to process images in chunks
 export const processImagesInChunks = async <T>(
   items: T[],

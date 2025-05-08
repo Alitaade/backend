@@ -16,7 +16,7 @@ import {
   countProducts,
   addProductSize as addNewProductSize,
 } from "../models/product"
-import { ensureImageDimensions } from "../utils/image-utils"
+import { ensureImageDimensions, optimizeBase64Image } from "../utils/image-utils"
 import { getAllCategories } from "../models/category"
 import formidable from "formidable"
 import path from "path"
@@ -667,10 +667,16 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
                 // Convert to base64 with high quality
                 const base64Data = `data:${mimeType};base64,${fileBuffer.toString("base64")}`
 
+                // Optimize the image while maintaining high quality
+                const optimizedBase64 = await optimizeBase64Image(base64Data, {
+                  quality: 95, // High quality
+                  format: mimeType.includes("png") ? "png" : "jpeg",
+                })
+
                 // Add to database directly as base64
                 const image = await addProductImage(
                   productId,
-                  base64Data,
+                  optimizedBase64,
                   i === 0 && isPrimary, // Only first image is primary if isPrimary is true
                   undefined, // width
                   undefined, // height,
@@ -766,9 +772,14 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
 
               for (let i = 0; i < base64Images.length; i++) {
                 try {
+                  // Optimize the base64 image while maintaining high quality
+                  const optimizedBase64 = await optimizeBase64Image(base64Images[i], {
+                    quality: 95, // High quality
+                  })
+
                   const image = await addProductImage(
                     productId,
-                    base64Images[i],
+                    optimizedBase64,
                     i === 0 && isPrimary, // Only first image is primary if isPrimary is true
                     undefined, // width
                     undefined, // height
