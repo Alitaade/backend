@@ -3,13 +3,10 @@ import type { NextApiRequest, NextApiResponse } from "next"
 import { addMultipleImages } from "../../../../../controllers/product-controller"
 import { requireAdmin, enableCors } from "../../../../../middleware/auth-middleware"
 
-// Set a longer timeout for this specific route
+// Update the config to properly handle multipart/form-data
 export const config = {
   api: {
-    bodyParser: {
-      sizeLimit: "10mb", // Increase size limit for image uploads
-    },
-    responseLimit: false, // No response size limit
+    bodyParser: false, // Important: Disable the built-in body parser for multipart/form-data
   },
 }
 
