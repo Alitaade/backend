@@ -532,27 +532,16 @@ export interface OrderStatusRow {
   count: string;
 }
 // Paystack related interfaces
-export interface PaystackPaymentResponse {
-  status: boolean;
-  message?: string;
+export interface  PaystackPaymentResponse {
+  status: boolean
+  message?: string
   data?: {
-    authorization_url?: string;
-    access_code?: string;
-    reference?: string;
-    status?: string;
-    amount?: number;
-    currency?: string;
-    transaction_date?: string;
-    customer?: {
-      id?: number;
-      email?: string;
-      name?: string;
-      phone?: string;
-    };
-    metadata?: Record<string, any>;
-  };
-  usedCurrency?: string;
-  originalCurrency?: string;
+    authorization_url?: string
+    access_code?: string
+    reference?: string
+  }
+  usedCurrency?: string
+  originalCurrency?: string
 }
 
 export interface PaystackVerificationResponse {
