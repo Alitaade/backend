@@ -7,6 +7,7 @@ import { requireAdmin, enableCors } from "../../../../../middleware/auth-middlew
 export const config = {
   api: {
     bodyParser: false, // Important: Disable the built-in body parser for multipart/form-data
+    responseLimit: false, // No response size limit
   },
 }
 

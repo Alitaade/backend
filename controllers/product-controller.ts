@@ -649,7 +649,7 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
             const uploadedFiles = []
             const errors = []
 
-            // Process each file
+            // Process each file - convert to high-quality base64
             for (let i = 0; i < fileArray.length; i++) {
               const file = fileArray[i]
 
@@ -661,27 +661,19 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
               }
 
               try {
-                // Generate a unique filename
-                const uniqueFilename = `${uuidv4()}${path.extname(file.originalFilename || "")}`
+                // Read file as buffer
+                const fileBuffer = require("fs").readFileSync(file.filepath)
 
-                // For development, save to local public directory
-                const publicPath = `/uploads/${uniqueFilename}`
-                const destinationPath = path.join(process.cwd(), "public", "uploads", uniqueFilename)
+                // Convert to base64 with high quality
+                const base64Data = `data:${mimeType};base64,${fileBuffer.toString("base64")}`
 
-                // Ensure public uploads directory exists
-                const uploadDir = path.dirname(destinationPath)
-                ensureDir(uploadDir)
-
-                // Move the file from temp location to public directory
-                fs.copyFileSync(file.filepath, destinationPath)
-
-                // Add to database
+                // Add to database directly as base64
                 const image = await addProductImage(
                   productId,
-                  publicPath,
+                  base64Data,
                   i === 0 && isPrimary, // Only first image is primary if isPrimary is true
                   undefined, // width
-                  undefined, // height
+                  undefined, // height,
                   altText,
                 )
 
@@ -692,8 +684,8 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
               } finally {
                 // Clean up temp file
                 try {
-                  if (fs.existsSync(file.filepath)) {
-                    fs.unlinkSync(file.filepath)
+                  if (require("fs").existsSync(file.filepath)) {
+                    require("fs").unlinkSync(file.filepath)
                   }
                 } catch (err) {
                   console.warn(`Could not delete temp file for image ${i + 1}:`, err)
@@ -735,78 +727,94 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
       })
     } else {
       // Handle JSON payload with base64 images or URLs
-      if (!req.body) {
-        return res.status(400).json({ error: "Request body is missing" })
-      }
+      // Parse the request body manually since bodyParser is disabled
+      let body = ""
 
-      const { base64Images, imageUrls, isPrimary, altText } = req.body
-
-      console.log("Received JSON payload:", {
-        hasBase64: Array.isArray(base64Images) && base64Images.length > 0,
-        hasUrls: Array.isArray(imageUrls) && imageUrls.length > 0,
-        isPrimary,
+      req.on("data", (chunk) => {
+        body += chunk.toString()
       })
 
-      // Validate input
-      if (
-        (!base64Images || !Array.isArray(base64Images) || base64Images.length === 0) &&
-        (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0)
-      ) {
-        return res.status(400).json({ error: "At least one image (URL or base64) is required" })
-      }
-
-      const uploadedFiles = []
-      const uploadedUrls = []
-      const errors = []
-
-      // Process base64 images
-      if (base64Images && Array.isArray(base64Images) && base64Images.length > 0) {
-        console.log(`Processing ${base64Images.length} base64 images for product ${productId}`)
-
-        for (let i = 0; i < base64Images.length; i++) {
+      return new Promise<void>((resolve) => {
+        req.on("end", async () => {
           try {
-            const image = await addProductImage(
-              productId,
-              base64Images[i],
-              i === 0 && isPrimary, // Only first image is primary if isPrimary is true
-              undefined, // width
-              undefined, // height
-              altText || `Image of product ${productId}`,
-            )
+            // Parse the JSON body
+            const jsonBody = JSON.parse(body)
+            const { base64Images, imageUrls, isPrimary, altText } = jsonBody
 
-            uploadedFiles.push(image)
+            console.log("Received JSON payload:", {
+              hasBase64: Array.isArray(base64Images) && base64Images.length > 0,
+              hasUrls: Array.isArray(imageUrls) && imageUrls.length > 0,
+              isPrimary,
+            })
+
+            // Validate input
+            if (
+              (!base64Images || !Array.isArray(base64Images) || base64Images.length === 0) &&
+              (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0)
+            ) {
+              res.status(400).json({ error: "At least one image (URL or base64) is required" })
+              return resolve()
+            }
+
+            const uploadedFiles = []
+            const uploadedUrls = []
+            const errors = []
+
+            // Process base64 images
+            if (base64Images && Array.isArray(base64Images) && base64Images.length > 0) {
+              console.log(`Processing ${base64Images.length} base64 images for product ${productId}`)
+
+              for (let i = 0; i < base64Images.length; i++) {
+                try {
+                  const image = await addProductImage(
+                    productId,
+                    base64Images[i],
+                    i === 0 && isPrimary, // Only first image is primary if isPrimary is true
+                    undefined, // width
+                    undefined, // height
+                    altText || `Image of product ${productId}`,
+                  )
+
+                  uploadedFiles.push(image)
+                } catch (error) {
+                  console.error(`Error processing base64 image ${i + 1}:`, error)
+                  errors.push(`Failed to process base64 image ${i + 1}: ${error.message}`)
+                }
+              }
+            }
+
+            // Process image URLs
+            if (imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0) {
+              console.log(`Processing ${imageUrls.length} image URLs for product ${productId}`)
+
+              for (let i = 0; i < imageUrls.length; i++) {
+                try {
+                  const image = await addProductImageByUrl(
+                    productId,
+                    imageUrls[i],
+                    uploadedFiles.length === 0 && i === 0 && isPrimary, // Primary if first URL and no files uploaded
+                  )
+
+                  uploadedUrls.push(image)
+                } catch (error) {
+                  console.error(`Error processing URL ${i + 1}:`, error)
+                  errors.push(`Failed to process URL ${i + 1}: ${error.message}`)
+                }
+              }
+            }
+
+            res.status(200).json({
+              message: "Image processing complete",
+              uploadedFiles,
+              uploadedUrls,
+              errors: errors.length > 0 ? errors : undefined,
+            })
           } catch (error) {
-            console.error(`Error processing base64 image ${i + 1}:`, error)
-            errors.push(`Failed to process base64 image ${i + 1}: ${error.message}`)
+            console.error("Error parsing JSON body:", error)
+            res.status(400).json({ error: `Invalid JSON body: ${error.message}` })
           }
-        }
-      }
-
-      // Process image URLs
-      if (imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0) {
-        console.log(`Processing ${imageUrls.length} image URLs for product ${productId}`)
-
-        for (let i = 0; i < imageUrls.length; i++) {
-          try {
-            const image = await addProductImageByUrl(
-              productId,
-              imageUrls[i],
-              uploadedFiles.length === 0 && i === 0 && isPrimary, // Primary if first URL and no files uploaded
-            )
-
-            uploadedUrls.push(image)
-          } catch (error) {
-            console.error(`Error processing URL ${i + 1}:`, error)
-            errors.push(`Failed to process URL ${i + 1}: ${error.message}`)
-          }
-        }
-      }
-
-      return res.status(200).json({
-        message: "Image processing complete",
-        uploadedFiles,
-        uploadedUrls,
-        errors: errors.length > 0 ? errors : undefined,
+          return resolve()
+        })
       })
     }
   } catch (error) {
@@ -814,7 +822,6 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
     return res.status(500).json({ error: `Internal server error: ${error.message}` })
   }
 }
-
 // Export all functions for use in API routes
 export {
   getAllProducts,
