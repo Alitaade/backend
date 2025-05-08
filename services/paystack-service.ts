@@ -2,10 +2,7 @@ import axios from "axios"
 import { getUsdToNgnRate, getUsdToRate } from "@/services/exchange-rate-service"
 import { 
   PaystackPaymentResponse, 
-  PaystackPaymentPayload, 
-  PaystackVerificationResponse,
-  InitializePaymentParams,
-  Transaction 
+
 } from "@/types/index"
 
 // Paystack credentials
@@ -17,17 +14,17 @@ const PAYSTACK_BASE_URL = "https://api.paystack.co"
  * @param params Payment initialization parameters
  * @returns Promise with payment initialization response
  */
-export const initializePayment = async ({
-  orderId,
-  amount,
-  customerEmail,
-  customerName,
-  customerPhone,
-  callbackUrl,
-  currencyCode = "NGN",
+export const initializePayment = async (
+  orderId: string,
+  amount: number,
+  customerEmail: string,
+  customerName: string,
+  customerPhone: string,
+  callbackUrl: string,
+  currencyCode = "NGN", // Default to NGN since that's what Paystack primarily supports
   exchangeRate = 1,
-  additionalMetadata = {}
-}: InitializePaymentParams): Promise<PaystackPaymentResponse> => {
+  additionalMetadata = {},
+): Promise<PaystackPaymentResponse> => {
   try {
     let formattedAmount = Math.round(amount * 100)
     let paymentCurrency = currencyCode
@@ -62,7 +59,7 @@ export const initializePayment = async ({
 
     // Format the request according to Paystack's API documentation
     const reference = `ORDER-${orderId}-${Date.now()}`
-    const payload: PaystackPaymentPayload = {
+    const payload = {
       email: customerEmail,
       amount: formattedAmount,
       currency: paymentCurrency,
@@ -176,7 +173,7 @@ export const initializePayment = async ({
           }
           
           // Update payload for NGN payment
-          const ngnPayload: PaystackPaymentPayload = {
+          const ngnPayload = {
             ...payload,
             amount: formattedAmount,
             currency: "NGN",
@@ -233,10 +230,8 @@ export const initializePayment = async ({
 
 /**
  * Verify a payment with Paystack
- * @param reference Payment reference to verify
- * @returns Promise with payment verification response
  */
-export const verifyPayment = async (reference: string): Promise<PaystackVerificationResponse> => {
+export const verifyPayment = async (reference: string): Promise<any> => {
   try {
     console.log("Verifying payment with Paystack for reference:", reference)
 
@@ -291,37 +286,4 @@ export const verifyPayment = async (reference: string): Promise<PaystackVerifica
     console.error("Paystack payment verification error:", error.response?.data || error.message)
     throw new Error(error.response?.data?.message || "Failed to verify payment")
   }
-}
-
-/**
- * Creates a Transaction record from a successful Paystack verification response
- * @param verificationResponse The response from verifyPayment
- * @returns Transaction object ready for database storage
- */
-export const createTransactionFromPaystackResponse = (
-  verificationResponse: PaystackVerificationResponse
-): Transaction | null => {
-  if (!verificationResponse.data || !verificationResponse.data.reference) {
-    console.error("Invalid verification response for transaction creation", verificationResponse)
-    return null
-  }
-
-  const data = verificationResponse.data
-  const metadata = data.metadata || {}
-  
-  // Get the original currency and amount from metadata if available
-  const currency = metadata.original_currency || data.currency || "NGN"
-  // Use the original amount if available, otherwise use the amount from the payment provider
-  const amount = metadata.original_amount || (data.amount ? data.amount / 100 : 0)
-  
-  const transaction: Transaction = {
-    reference: data.reference,
-    order_id: parseInt(metadata.order_id || "0", 10),
-    amount,
-    currency,
-    payment_method: "paystack",
-    status: data.status || "unknown"
-  }
-
-  return transaction
 }
