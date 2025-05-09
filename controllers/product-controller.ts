@@ -15,6 +15,9 @@ import {
   getAllProductsWithoutPagination,
   countProducts,
   addProductSize as addNewProductSize,
+  forceDeleteProduct,
+  calculateTotalStock,
+  updateProductTotalStock,
 } from "../models/product"
 import { ensureImageDimensions, optimizeBase64Image } from "../utils/image-utils"
 import { getAllCategories } from "../models/category"
@@ -53,7 +56,177 @@ const UPLOADS_DIR =
 
 // Initialize uploads directory
 ensureDir(UPLOADS_DIR)
-// Updated product controller with fixes for the pagination issue
+
+// Add new force delete endpoint handler
+export const forceDeleteExistingProduct = async (req: NextApiRequest, res: NextApiResponse) => {
+  try {
+    const { id } = req.query
+
+    if (!id) {
+      return res.status(400).json({ error: "Product ID is required" })
+    }
+
+    const productId = Number.parseInt(id as string)
+
+    // Attempt to force delete the product
+    const { success, message } = await forceDeleteProduct(productId)
+
+    if (!success) {
+      return res.status(404).json({ error: message || "Failed to delete product" })
+    }
+
+    return res.status(200).json({
+      message: "Product and all its references have been permanently deleted",
+      forceDelete: true,
+    })
+  } catch (error) {
+    console.error("Error force deleting product:", error)
+    return res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+// Update the deleteExistingProduct function to try normal delete first
+export const deleteExistingProduct = async (req: NextApiRequest, res: NextApiResponse) => {
+  try {
+    const { id } = req.query
+
+    if (!id) {
+      return res.status(400).json({ error: "Product ID is required" })
+    }
+
+    const productId = Number.parseInt(id as string)
+
+    try {
+      // Try normal delete first
+      const success = await deleteProduct(productId)
+
+      if (success) {
+        return res.status(200).json({ message: "Product deleted successfully" })
+      } else {
+        return res.status(404).json({ error: "Product not found" })
+      }
+    } catch (error) {
+      // If normal delete fails due to foreign key constraint
+      if (error.code === "23503") {
+        return res.status(400).json({
+          error: "Cannot delete product because it is referenced in orders",
+          constraint: error.constraint,
+          detail: error.detail,
+          requiresForceDelete: true,
+        })
+      }
+
+      throw error
+    }
+  } catch (error) {
+    console.error("Error deleting product:", error)
+    return res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+// Update the createNewProduct function to handle automatic stock calculation
+export const createNewProduct = async (req: NextApiRequest, res: NextApiResponse) => {
+  try {
+    const { name, description, price, category_id, sizes, images } = req.body
+
+    // Validate required fields
+    if (!name || !price) {
+      return res.status(400).json({ error: "Name and price are required" })
+    }
+
+    // Validate that images is an array if provided
+    if (images && !Array.isArray(images)) {
+      return res.status(400).json({ error: "Images must be an array" })
+    }
+
+    // Process images to ensure they have dimensions
+    const processedImages = images
+      ? images.map((img: any, index: number) => {
+          const { url, width, height } = ensureImageDimensions(img.image_url || img.url, img.width, img.height)
+
+          return {
+            image_url: url,
+            width,
+            height,
+            is_primary: index === 0 || img.is_primary,
+            alt_text: img.alt_text || `Image of ${name}`,
+          }
+        })
+      : undefined
+
+    // Calculate total stock from sizes
+    const totalStock = sizes ? sizes.reduce((sum, size) => sum + (Number.parseInt(size.stock_quantity) || 0), 0) : 0
+
+    const product = await createProduct(
+      { name, description, price, category_id, stock_quantity: totalStock },
+      sizes,
+      processedImages,
+    )
+
+    return res.status(201).json({ message: "Product created successfully", product })
+  } catch (error) {
+    console.error("Error creating product:", error)
+    return res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+// Update the updateExistingProduct function to handle automatic stock calculation
+export const updateExistingProduct = async (req: NextApiRequest, res: NextApiResponse) => {
+  try {
+    const { id } = req.query
+    const { name, description, price, category_id } = req.body
+
+    if (!id) {
+      return res.status(400).json({ error: "Product ID is required" })
+    }
+
+    const productId = Number.parseInt(id as string)
+
+    // Update the product without stock_quantity (it's calculated from sizes)
+    const product = await updateProduct(productId, {
+      name,
+      description,
+      price,
+      category_id,
+    })
+
+    if (!product) {
+      return res.status(404).json({ error: "Product not found" })
+    }
+
+    // Recalculate and update the total stock
+    await updateProductTotalStock(productId)
+
+    // Get the updated product with the new calculated stock
+    const updatedProduct = await getProductById(productId)
+
+    return res.status(200).json({ message: "Product updated successfully", product: updatedProduct })
+  } catch (error) {
+    console.error("Error updating product:", error)
+    return res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+// Add a new endpoint to get the calculated total stock
+export const getProductTotalStock = async (req: NextApiRequest, res: NextApiResponse) => {
+  try {
+    const { id } = req.query
+
+    if (!id) {
+      return res.status(400).json({ error: "Product ID is required" })
+    }
+
+    const productId = Number.parseInt(id as string)
+    const totalStock = await calculateTotalStock(productId)
+
+    return res.status(200).json({ totalStock })
+  } catch (error) {
+    console.error("Error getting product total stock:", error)
+    return res.status(500).json({ error: "Internal server error" })
+  }
+}
+
+// Keep other functions as they are...
 export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     const { limit = "10", offset = "0", category_id, sort = "id", order = "asc", page = "1", all = "" } = req.query
@@ -125,6 +298,7 @@ export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => 
     return res.status(500).json({ error: "Internal server error" })
   }
 }
+
 export const getProduct = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     const { id } = req.query
@@ -142,97 +316,6 @@ export const getProduct = async (req: NextApiRequest, res: NextApiResponse) => {
     return res.status(200).json({ product })
   } catch (error) {
     console.error("Error getting product:", error)
-    return res.status(500).json({ error: "Internal server error" })
-  }
-}
-
-export const createNewProduct = async (req: NextApiRequest, res: NextApiResponse) => {
-  try {
-    const { name, description, price, category_id, stock_quantity, sizes, images } = req.body
-
-    // Validate required fields
-    if (!name || !price) {
-      return res.status(400).json({ error: "Name and price are required" })
-    }
-
-    // Validate that images is an array if provided
-    if (images && !Array.isArray(images)) {
-      return res.status(400).json({ error: "Images must be an array" })
-    }
-
-    // Process images to ensure they have dimensions
-    const processedImages = images
-      ? images.map((img: any, index: number) => {
-          const { url, width, height } = ensureImageDimensions(img.image_url || img.url, img.width, img.height)
-
-          return {
-            image_url: url,
-            width,
-            height,
-            is_primary: index === 0 || img.is_primary,
-            alt_text: img.alt_text || `Image of ${name}`,
-          }
-        })
-      : undefined
-
-    const product = await createProduct(
-      { name, description, price, category_id, stock_quantity },
-      sizes,
-      processedImages,
-    )
-
-    return res.status(201).json({ message: "Product created successfully", product })
-  } catch (error) {
-    console.error("Error creating product:", error)
-    return res.status(500).json({ error: "Internal server error" })
-  }
-}
-
-export const updateExistingProduct = async (req: NextApiRequest, res: NextApiResponse) => {
-  try {
-    const { id } = req.query
-    const { name, description, price, category_id, stock_quantity } = req.body
-
-    if (!id) {
-      return res.status(400).json({ error: "Product ID is required" })
-    }
-
-    const product = await updateProduct(Number.parseInt(id as string), {
-      name,
-      description,
-      price,
-      category_id,
-      stock_quantity,
-    })
-
-    if (!product) {
-      return res.status(404).json({ error: "Product not found" })
-    }
-
-    return res.status(200).json({ message: "Product updated successfully", product })
-  } catch (error) {
-    console.error("Error updating product:", error)
-    return res.status(500).json({ error: "Internal server error" })
-  }
-}
-
-export const deleteExistingProduct = async (req: NextApiRequest, res: NextApiResponse) => {
-  try {
-    const { id } = req.query
-
-    if (!id) {
-      return res.status(400).json({ error: "Product ID is required" })
-    }
-
-    const success = await deleteProduct(Number.parseInt(id as string))
-
-    if (!success) {
-      return res.status(404).json({ error: "Product not found" })
-    }
-
-    return res.status(200).json({ message: "Product deleted successfully" })
-  } catch (error) {
-    console.error("Error deleting product:", error)
     return res.status(500).json({ error: "Internal server error" })
   }
 }
@@ -848,4 +931,7 @@ export {
   addProductImageByUrl,
   searchProductsByQuery,
   addNewProductSize,
+  forceDeleteProduct,
+  calculateTotalStock,
+  updateProductTotalStock,
 }
