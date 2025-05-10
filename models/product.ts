@@ -21,22 +21,17 @@ export const deleteProduct = async (id: number | string): Promise<{ success: boo
     return await forceDeleteProduct(id)
   } catch (error) {
     console.error("Error in deleteProduct:", error)
-    
+    //@ts-ignore
     // Check if this is a foreign key constraint error
     if (error.code === '23503') {
       console.log("Foreign key constraint violation detected, attempting force delete")
       return await forceDeleteProduct(id)
     }
-    
+    //@ts-ignore
     return { success: false, message: error.message || "Unknown error occurred" }
   }
 }
 
-/**
- * Force delete a product by removing all references first
- * @param id Product ID to force delete
- * @returns Object with success status and optional message
- */
 /**
  * Force delete a product by removing all references first, with improved error handling
  * @param id Product ID to force delete

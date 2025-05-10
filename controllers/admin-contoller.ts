@@ -1,7 +1,7 @@
+//@ts-ignore
 import type { NextApiRequest, NextApiResponse } from "next"
 import * as adminModel from "@/models/admin"
 import { generateCSV } from "../utils/csv-utils"
-
 // Admin dashboard statistics
 export const getDashboardStats = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
