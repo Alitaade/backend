@@ -3,17 +3,15 @@ import type { NextApiRequest, NextApiResponse } from "next"
 import { addMultipleImages } from "../../../../../controllers/product-controller"
 import { requireAdmin, enableCors } from "../../../../../middleware/auth-middleware"
 
-// Update the config to properly handle multipart/form-data
 export const config = {
   api: {
-    bodyParser: false, // Disable the built-in parser for file uploads
-    responseLimit: '50mb', // Increased limit for larger response sizes
+    responseLimit: "10mb",
+    bodyParser: {
+      sizeLimit: "10mb",
+    },
   },
 }
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Set a longer timeout for the response
-  res.socket.setTimeout(600000); // 10 minutes
   
   console.log(`[DEBUG] Request received: ${req.method} to ${req.url}`);
   console.log(`[DEBUG] Headers:`, req.headers);
@@ -23,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log("[DEBUG] Handling OPTIONS request");
     
     // Set CORS headers explicitly for preflight
-    res.setHeader("Access-Control-Allow-Origin", "https://admin-frontends.vercel.app");
+    res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key");
     res.setHeader("Access-Control-Allow-Credentials", "true");
@@ -55,7 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                   console.log("[DEBUG] Sending initial 202 response");
                   res.writeHead(202, {
                     'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': "https://admin-frontends.vercel.app",
+                    'Access-Control-Allow-Origin': "*",
                     'Access-Control-Allow-Headers': "Content-Type, Authorization, x-api-key",
                     'Access-Control-Allow-Credentials': "true"
                   });
