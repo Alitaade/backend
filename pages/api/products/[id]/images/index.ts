@@ -15,25 +15,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Set a longer timeout for the response
   res.socket.setTimeout(600000); // 10 minutes
   
-  // Handle preflight OPTIONS request
-  if (req.method === "OPTIONS") {
-    res.setHeader("Access-Control-Allow-Origin", "*") // Replace with specific origin in production
-    res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
-    return res.status(200).end()
-  }
- 
-  try {
-    switch (req.method) {
-      case "POST": {
-        // Admin only - add multiple images to a product
-        await new Promise<void>((resolve, reject) => {
-          enableCors(req, res, async () => {
+  // Match the working pattern - Use enableCors first, before handling any methods
+  return new Promise<void>((resolve, reject) => {
+    enableCors(req, res, async () => {
+      try {
+        // Now handle methods after CORS is properly set up
+        switch (req.method) {
+          case "OPTIONS":
+            // The enableCors middleware should have handled this already
+            return res.status(200).end();
+            
+          case "POST": {
+            // Admin only - add multiple images to a product
             requireAdmin(req, res, async () => {
               try {
                 // Acknowledge receipt immediately
-                // The frontend should be designed to handle this
-                // For large uploads, sending early response helps prevent timeout
                 if (!res.headersSent) {
                   res.writeHead(202, {
                     'Content-Type': 'application/json',
@@ -44,7 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                   }));
                 }
                 
-                // Process the images - don't await, just let it run
+                // Process the images
                 addMultipleImages(req, res)
                   .catch(error => {
                     console.error("Background processing error:", error);
@@ -56,21 +52,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 reject(error);
               }
             });
+            break;
+          }
+          
+          default:
+            res.status(405).json({ error: "Method not allowed" });
+            resolve();
+        }
+      } catch (error) {
+        console.error("Error handling request:", error);
+        if (!res.headersSent) {
+          res.status(500).json({ 
+            error: "Internal server error",
+            message: error.message || "Unknown error" 
           });
-        });
-        break;
+        }
+        resolve();
       }
-      default:
-        res.status(405).json({ error: "Method not allowed" });
-    }
-  } catch (error) {
-    console.error("Error handling request:", error);
-    // Only send an error response if one hasn't been sent already
-    if (!res.headersSent) {
-      res.status(500).json({ 
-        error: "Internal server error",
-        message: error.message || "Unknown error" 
-      });
-    }
-  }
+    });
+  });
 }
