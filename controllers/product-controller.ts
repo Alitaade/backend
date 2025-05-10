@@ -18,7 +18,6 @@ import {
   forceDeleteProduct,
   calculateTotalStock,
   updateProductTotalStock,
-  canDeleteProduct,
 } from "../models/product"
 import { ensureImageDimensions, optimizeBase64Image } from "../utils/image-utils"
 import { getAllCategories } from "../models/category"
@@ -30,6 +29,7 @@ import { v4 as uuidv4 } from "uuid"
 // Config for file upload endpoints to disable body parsing
 export const config = {
   api: {
+    responseLimit: '10mb',
     bodyParser: false,
   },
 }
@@ -68,9 +68,12 @@ export const forceDeleteExistingProduct = async (req: NextApiRequest, res: NextA
     }
 
     const productId = Number.parseInt(id as string)
-
+    
+    if (isNaN(productId)) {
+      return res.status(400).json({ error: "Invalid product ID format" })
+    }
     // Attempt to force delete the product
-    const { success, message } = await forceDeleteProduct(productId)
+    const { success, message } = await deleteProduct(productId)
 
     if (!success) {
       return res.status(404).json({ error: message || "Failed to delete product" })
@@ -78,7 +81,6 @@ export const forceDeleteExistingProduct = async (req: NextApiRequest, res: NextA
 
     return res.status(200).json({
       message: "Product and all its references have been permanently deleted",
-      forceDelete: true,
     })
   } catch (error) {
     console.error("Error force deleting product:", error)
@@ -86,7 +88,10 @@ export const forceDeleteExistingProduct = async (req: NextApiRequest, res: NextA
   }
 }
 
-// Update the deleteExistingProduct function to properly handle foreign key constraints
+/**
+ * API handler to delete a product 
+ * Uses the deleteProduct function which handles regular and force delete scenarios
+ */
 export const deleteExistingProduct = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     const { id } = req.query
@@ -96,43 +101,27 @@ export const deleteExistingProduct = async (req: NextApiRequest, res: NextApiRes
     }
 
     const productId = Number.parseInt(id as string)
-
-    try {
-      // First check if the product can be safely deleted
-      const { canDelete, message } = await canDeleteProduct(productId)
-
-      if (!canDelete) {
-        // If it can't be deleted normally, inform the client
-        return res.status(409).json({
-          error: message || "Cannot delete product because it is referenced in orders",
-          requiresForceDelete: true,
-          productId,
-        })
-      }
-
-      // If it can be deleted normally, proceed
-      const success = await deleteProduct(productId)
-
-      if (!success) {
-        return res.status(404).json({ error: "Product not found" })
-      }
-
-      return res.status(200).json({ message: "Product deleted successfully" })
-    } catch (error) {
-      // Check for foreign key constraint violation
-      if (error.code === "23503") {
-        return res.status(409).json({
-          error: "Cannot delete product because it is referenced in orders",
-          detail: error.detail,
-          requiresForceDelete: true,
-          productId,
-        })
-      }
-      throw error
+    
+    if (isNaN(productId)) {
+      return res.status(400).json({ error: "Invalid product ID format" })
     }
+
+    // Use the deleteProduct function which handles both normal and force delete scenarios
+    const { success, message } = await deleteProduct(productId)
+
+    if (!success) {
+      return res.status(404).json({ error: message || "Failed to delete product" })
+    }
+
+    return res.status(200).json({
+      message: "Product deleted successfully",
+    })
   } catch (error) {
     console.error("Error deleting product:", error)
-    return res.status(500).json({ error: "Internal server error", details: error.message })
+    return res.status(500).json({ 
+      error: "Internal server error", 
+      details: error.message || "Unknown error occurred"
+    })
   }
 }
 

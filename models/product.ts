@@ -1,32 +1,83 @@
 import { query } from "../database/connection"
-import type { ProductInput, ProductSize, ProductImage, ProductWithDetails } from "../types"
+import type { ProductInput, ProductSize, ProductImage, ProductWithDetails } from "@/types"
 
-// Add this new function to force delete a product and all its references
-export const forceDeleteProduct = async (id: number): Promise<{ success: boolean; message?: string }> => {
+/**
+ * Delete a product with a safe approach first, then force delete if needed
+ * @param id Product ID to delete
+ * @returns Object with success status and optional message
+ */
+export const deleteProduct = async (id: number | string): Promise<{ success: boolean; message?: string }> => {
   try {
-    // Start a transaction
-    await query("BEGIN")
+    // Try normal delete first
+    const result = await query("DELETE FROM products WHERE id = $1 RETURNING id", [id])
+    
+    // If normal delete succeeded, return success
+    if (result.rows.length > 0) {
+      return { success: true }
+    }
+    
+    // If normal delete didn't work, try force delete
+    console.log(`Regular delete failed for product ${id}, attempting force delete...`)
+    return await forceDeleteProduct(id)
+  } catch (error) {
+    console.error("Error in deleteProduct:", error)
+    
+    // Check if this is a foreign key constraint error
+    if (error.code === '23503') {
+      console.log("Foreign key constraint violation detected, attempting force delete")
+      return await forceDeleteProduct(id)
+    }
+    
+    return { success: false, message: error.message || "Unknown error occurred" }
+  }
+}
 
+/**
+ * Force delete a product by removing all references first
+ * @param id Product ID to force delete
+ * @returns Object with success status and optional message
+ */
+/**
+ * Force delete a product by removing all references first, with improved error handling
+ * @param id Product ID to force delete
+ * @returns Object with success status and optional message
+ */
+export const forceDeleteProduct = async (id: number| string): Promise<{ success: boolean; message?: string }> => {
+  let client = null
+  
+  try {
+    // Get a client for transaction
+    client = await query('BEGIN')
+    
     try {
-      // 1. Delete from order_items first (this breaks the foreign key constraint)
-      await query("DELETE FROM order_items WHERE product_id = $1", [id])
+      console.log(`Starting force delete for product ${id}...`)
+      
+      // 1. Delete from order_items first - handle case where no rows exist
+      const orderItemsResult = await query("DELETE FROM order_items WHERE product_id = $1", [id])
+      console.log(`Deleted ${orderItemsResult.rowCount || 0} order_items references`)
 
-      // 2. Delete from cart_items
-      await query("DELETE FROM cart_items WHERE product_id = $1", [id])
+      // 2. Delete from cart_items - handle case where no rows exist
+      const cartItemsResult = await query("DELETE FROM cart_items WHERE product_id = $1", [id])
+      console.log(`Deleted ${cartItemsResult.rowCount || 0} cart_items references`)
 
-      // 3. Delete product images
-      await query("DELETE FROM product_images WHERE product_id = $1", [id])
+      // 3. Delete product images - handle case where no rows exist
+      const imagesResult = await query("DELETE FROM product_images WHERE product_id = $1", [id])
+      console.log(`Deleted ${imagesResult.rowCount || 0} product images`)
 
-      // 4. Delete product sizes
-      await query("DELETE FROM product_sizes WHERE product_id = $1", [id])
+      // 4. Delete product sizes - handle case where no rows exist
+      const sizesResult = await query("DELETE FROM product_sizes WHERE product_id = $1", [id])
+      console.log(`Deleted ${sizesResult.rowCount || 0} product sizes`)
 
       // 5. Finally delete the product itself
-      const result = await query("DELETE FROM products WHERE id = $1 RETURNING id", [id])
+      const productResult = await query("DELETE FROM products WHERE id = $1 RETURNING id", [id])
 
-      if (result.rows.length === 0) {
+      if (productResult.rows.length === 0) {
         await query("ROLLBACK")
+        console.log(`Product with ID ${id} not found in the products table, rollback performed`)
         return { success: false, message: "Product not found" }
       }
+
+      console.log(`Successfully deleted product ${id}`)
 
       // Commit the transaction
       await query("COMMIT")
@@ -35,48 +86,22 @@ export const forceDeleteProduct = async (id: number): Promise<{ success: boolean
       // Rollback the transaction in case of error
       await query("ROLLBACK")
       console.error("Error force deleting product:", error)
-      throw error
+      return { success: false, message: error.message || "Error during force delete operation" }
     }
   } catch (error) {
-    console.error("Error in force delete transaction:", error)
-    return { success: false, message: error.message || "Unknown error occurred" }
+    // If we couldn't even begin the transaction
+    console.error("Error starting force delete transaction:", error)
+    return { success: false, message: error.message || "Couldn't start delete transaction" }
   }
 }
-
-// Modify the deleteProduct function to use a soft delete approach
-export const deleteProduct = async (id: number): Promise<boolean> => {
-  try {
-    // Start a transaction
-    await query("BEGIN")
-
-    try {
-      // Delete related records first
-      await query("DELETE FROM product_images WHERE product_id = $1", [id])
-      await query("DELETE FROM product_sizes WHERE product_id = $1", [id])
-
-      // Delete the product
-      const result = await query("DELETE FROM products WHERE id = $1 RETURNING id", [id])
-
-      // Commit the transaction
-      await query("COMMIT")
-
-      return result.rows.length > 0
-    } catch (error) {
-      // Rollback the transaction in case of error
-      await query("ROLLBACK")
-      console.error("Error deleting product:", error)
-      throw error
-    }
-  } catch (error) {
-    console.error("Error deleting product:", error)
-    throw error
-  }
-}
-
-// Function to calculate total stock from sizes
+/**
+ * Calculate total stock from product sizes
+ * @param productId Product ID to calculate stock for
+ * @returns Total stock quantity
+ */
 export const calculateTotalStock = async (productId: number): Promise<number> => {
   try {
-    const result = await query("SELECT SUM(stock_quantity) as total FROM product_sizes WHERE product_id = $1", [
+    const result = await query("SELECT COALESCE(SUM(stock_quantity), 0) as total FROM product_sizes WHERE product_id = $1", [
       productId,
     ])
 
@@ -87,7 +112,11 @@ export const calculateTotalStock = async (productId: number): Promise<number> =>
   }
 }
 
-// Update the product's total stock based on its sizes
+/**
+ * Update the product's total stock based on its sizes
+ * @param productId Product ID to update stock for
+ * @returns Success status
+ */
 export const updateProductTotalStock = async (productId: number): Promise<boolean> => {
   try {
     const totalStock = await calculateTotalStock(productId)
@@ -101,8 +130,13 @@ export const updateProductTotalStock = async (productId: number): Promise<boolea
   }
 }
 
-// Optimized version of the product controller to avoid timeouts
-
+/**
+ * Get all products without pagination
+ * @param category_id Optional category filter
+ * @param sort Sort field
+ * @param order Sort direction
+ * @returns Array of products with details
+ */
 export const getAllProductsWithoutPagination = async (
   category_id?: number,
   sort = "id",
@@ -194,7 +228,15 @@ export const getAllProductsWithoutPagination = async (
   }
 }
 
-// Similarly optimize the paginated version of getAllProducts
+/**
+ * Get paginated products
+ * @param limit Maximum number of products to return
+ * @param offset Pagination offset
+ * @param category_id Optional category filter
+ * @param sort Sort field
+ * @param order Sort direction
+ * @returns Array of products with details
+ */
 export const getAllProducts = async (
   limit = 10,
   offset = 0,
@@ -287,7 +329,11 @@ export const getAllProducts = async (
   }
 }
 
-// Keep the countProducts function as is
+/**
+ * Count products with optional category filter
+ * @param category_id Optional category filter
+ * @returns Total count of products
+ */
 export const countProducts = async (category_id?: number): Promise<number> => {
   try {
     let queryText = "SELECT COUNT(*) as total FROM products"
@@ -308,6 +354,11 @@ export const countProducts = async (category_id?: number): Promise<number> => {
   }
 }
 
+/**
+ * Get a product by ID with all details
+ * @param id Product ID
+ * @returns Product with details or null if not found
+ */
 export const getProductById = async (id: number): Promise<ProductWithDetails | null> => {
   try {
     const productResult = await query(
@@ -345,7 +396,13 @@ export const getProductById = async (id: number): Promise<ProductWithDetails | n
   }
 }
 
-// Modify createProduct to calculate total stock from sizes
+/**
+ * Create a new product with optional sizes and images
+ * @param productData Basic product information
+ * @param sizes Optional product sizes
+ * @param images Optional product images
+ * @returns Created product with details
+ */
 export const createProduct = async (
   productData: ProductInput,
   sizes?: { size: string; stock_quantity: number }[],
@@ -357,9 +414,11 @@ export const createProduct = async (
     alt_text?: string
   }[],
 ): Promise<ProductWithDetails> => {
+  let client = null
+  
   try {
     // Start a transaction
-    await query("BEGIN")
+    client = await query("BEGIN")
 
     // Calculate total stock from sizes
     let totalStock = 0
@@ -416,13 +475,20 @@ export const createProduct = async (
     return getProductById(product.id) as Promise<ProductWithDetails>
   } catch (error) {
     // Rollback the transaction in case of error
-    await query("ROLLBACK")
+    if (client) {
+      await query("ROLLBACK")
+    }
     console.error("Error creating product:", error)
     throw error
   }
 }
 
-// Modify updateProduct to not allow direct stock_quantity updates
+/**
+ * Update product information
+ * @param id Product ID to update
+ * @param productData Updated product data
+ * @returns Updated product with details or null if not found
+ */
 export const updateProduct = async (
   id: number,
   productData: Partial<ProductInput>,
@@ -488,6 +554,16 @@ export const updateProduct = async (
   }
 }
 
+/**
+ * Add a new image to a product
+ * @param product_id Product ID
+ * @param image_url URL of the image
+ * @param is_primary Whether this is the primary image
+ * @param width Optional width
+ * @param height Optional height
+ * @param alt_text Optional alt text
+ * @returns Created image
+ */
 export const addProductImage = async (
   product_id: number,
   image_url: string,
@@ -514,6 +590,11 @@ export const addProductImage = async (
   }
 }
 
+/**
+ * Delete a product image
+ * @param id Image ID to delete
+ * @returns Success status
+ */
 export const deleteProductImage = async (id: number): Promise<boolean> => {
   try {
     const result = await query("DELETE FROM product_images WHERE id = $1 RETURNING id", [id])
@@ -524,25 +605,31 @@ export const deleteProductImage = async (id: number): Promise<boolean> => {
   }
 }
 
-// Modify updateProductSize to update total stock
+/**
+ * Update a product size or create if it doesn't exist
+ * @param product_id Product ID
+ * @param size Size name/code
+ * @param stock_quantity Stock quantity for this size
+ * @returns Updated or created size
+ */
 export const updateProductSize = async (
   product_id: number,
   size: string,
   stock_quantity: number,
 ): Promise<ProductSize> => {
   try {
-    // Start transaction
+    // Check if the size already exists for this product
+    const existingSize = await query("SELECT * FROM product_sizes WHERE product_id = $1 AND size = $2", [
+      product_id,
+      size,
+    ])
+
+    let result;
+
+    // Start transaction outside of nested try/catch
     await query("BEGIN")
 
     try {
-      // Check if the size already exists for this product
-      const existingSize = await query("SELECT * FROM product_sizes WHERE product_id = $1 AND size = $2", [
-        product_id,
-        size,
-      ])
-
-      let result
-
       if (existingSize.rows.length > 0) {
         // Update existing size
         result = await query(
@@ -574,7 +661,11 @@ export const updateProductSize = async (
   }
 }
 
-// Modify deleteProductSize to update total stock
+/**
+ * Delete a product size
+ * @param id Size ID to delete
+ * @returns Success status
+ */
 export const deleteProductSize = async (id: number): Promise<boolean> => {
   try {
     // Start a transaction
@@ -582,7 +673,7 @@ export const deleteProductSize = async (id: number): Promise<boolean> => {
 
     try {
       // Get the product size info before deletion
-      const sizeInfo = await query("SELECT product_id, size FROM product_sizes WHERE id = $1", [id])
+      const sizeInfo = await query("SELECT product_id FROM product_sizes WHERE id = $1", [id])
 
       if (sizeInfo.rows.length === 0) {
         await query("ROLLBACK")
@@ -611,39 +702,55 @@ export const deleteProductSize = async (id: number): Promise<boolean> => {
     throw error
   }
 }
+
+/**
+ * Set a product image as the primary image
+ * @param productId Product ID
+ * @param imageId Image ID to set as primary
+ * @returns Success status
+ */
 export const setProductImageAsPrimary = async (productId: number, imageId: number): Promise<boolean> => {
   try {
     // Start a transaction
     await query("BEGIN")
 
-    // Check if the image exists and belongs to the product
-    const imageCheck = await query("SELECT id FROM product_images WHERE id = $1 AND product_id = $2", [
-      imageId,
-      productId,
-    ])
+    try {
+      // Check if the image exists and belongs to the product
+      const imageCheck = await query("SELECT id FROM product_images WHERE id = $1 AND product_id = $2", [
+        imageId,
+        productId,
+      ])
 
-    if (imageCheck.rows.length === 0) {
+      if (imageCheck.rows.length === 0) {
+        await query("ROLLBACK")
+        return false
+      }
+
+      // Set all images of this product to non-primary
+      await query("UPDATE product_images SET is_primary = false WHERE product_id = $1", [productId])
+
+      // Set the specified image as primary
+      await query("UPDATE product_images SET is_primary = true WHERE id = $1", [imageId])
+
+      // Commit the transaction
+      await query("COMMIT")
+
+      return true
+    } catch (error) {
       await query("ROLLBACK")
-      return false
+      throw error
     }
-
-    // Set all images of this product to non-primary
-    await query("UPDATE product_images SET is_primary = false WHERE product_id = $1", [productId])
-
-    // Set the specified image as primary
-    await query("UPDATE product_images SET is_primary = true WHERE id = $1", [imageId])
-
-    // Commit the transaction
-    await query("COMMIT")
-
-    return true
   } catch (error) {
-    await query("ROLLBACK")
     console.error("Error setting product image as primary:", error)
     throw error
   }
 }
 
+/**
+ * Search products by query string
+ * @param searchQuery Query string to search
+ * @returns Products matching the search
+ */
 export const searchProductsByQuery = async (searchQuery: string): Promise<ProductWithDetails[]> => {
   try {
     const searchQueryText = `%${searchQuery}%`
@@ -663,23 +770,53 @@ export const searchProductsByQuery = async (searchQuery: string): Promise<Produc
     )
 
     const products = productsResult.rows
-
-    // Get images and sizes for each product
-    const productsWithDetails: ProductWithDetails[] = []
-
-    for (const product of products) {
-      const imagesResult = await query("SELECT * FROM product_images WHERE product_id = $1 ORDER BY is_primary DESC", [
-        product.id,
-      ])
-
-      const sizesResult = await query("SELECT * FROM product_sizes WHERE product_id = $1", [product.id])
-
-      productsWithDetails.push({
-        ...product,
-        images: imagesResult.rows,
-        sizes: sizesResult.rows,
-      })
+    
+    if (products.length === 0) {
+      return []
     }
+
+    // Use the bulk fetching approach for better performance
+    const productIds = products.map(p => p.id)
+    
+    // Get all images for these products in a single query
+    const imagesQuery = `
+      SELECT * FROM product_images 
+      WHERE product_id = ANY($1::int[])
+      ORDER BY product_id, is_primary DESC
+    `
+    const imagesResult = await query(imagesQuery, [productIds])
+
+    // Get all sizes for these products in a single query
+    const sizesQuery = `
+      SELECT * FROM product_sizes
+      WHERE product_id = ANY($1::int[])
+      ORDER BY product_id
+    `
+    const sizesResult = await query(sizesQuery, [productIds])
+
+    // Create maps for quick lookup
+    const imagesMap = new Map()
+    imagesResult.rows.forEach((img) => {
+      if (!imagesMap.has(img.product_id)) {
+        imagesMap.set(img.product_id, [])
+      }
+      imagesMap.get(img.product_id).push(img)
+    })
+
+    const sizesMap = new Map()
+    sizesResult.rows.forEach((size) => {
+      if (!sizesMap.has(size.product_id)) {
+        sizesMap.set(size.product_id, [])
+      }
+      sizesMap.get(size.product_id).push(size)
+    })
+
+    // Combine everything into the final result
+    const productsWithDetails: ProductWithDetails[] = products.map((product) => ({
+      ...product,
+      images: imagesMap.get(product.id) || [],
+      sizes: sizesMap.get(product.id) || [],
+    }))
 
     return productsWithDetails
   } catch (error) {
@@ -688,7 +825,13 @@ export const searchProductsByQuery = async (searchQuery: string): Promise<Produc
   }
 }
 
-// Modify addProductSize to update total stock
+/**
+ * Add a product size
+ * @param product_id Product ID
+ * @param size Size name/code
+ * @param stock_quantity Stock quantity for this size
+ * @returns Created size
+ */
 export const addProductSize = async (
   product_id: number,
   size: string,
@@ -732,6 +875,16 @@ export const addProductSize = async (
   }
 }
 
+/**
+ * Add a new product image by URL
+ * @param product_id Product ID
+ * @param image_url URL of the image
+ * @param is_primary Whether this is the primary image
+ * @param width Optional width
+ * @param height Optional height
+ * @param alt_text Optional alt text
+ * @returns Created image
+ */
 export const addProductImageByUrl = async (
   product_id: number,
   image_url: string,
