@@ -23,41 +23,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).end()
   }
  
-
   try {
     switch (req.method) {
       case "POST": {
         // Admin only - add multiple images to a product
         await new Promise<void>((resolve, reject) => {
           enableCors(req, res, async () => {
-          requireAdmin(req, res, async () => {
-            try {
-              // Acknowledge receipt immediately
-              // The frontend should be designed to handle this
-              // For large uploads, sending early response helps prevent timeout
-              if (!res.headersSent) {
-                res.writeHead(202, {
-                  'Content-Type': 'application/json',
-                });
-                res.write(JSON.stringify({
-                  status: "received",
-                  message: "Upload received. Processing images...",
-                }));
+            requireAdmin(req, res, async () => {
+              try {
+                // Acknowledge receipt immediately
+                // The frontend should be designed to handle this
+                // For large uploads, sending early response helps prevent timeout
+                if (!res.headersSent) {
+                  res.writeHead(202, {
+                    'Content-Type': 'application/json',
+                  });
+                  res.write(JSON.stringify({
+                    status: "received",
+                    message: "Upload received. Processing images...",
+                  }));
+                }
+                
+                // Process the images - don't await, just let it run
+                addMultipleImages(req, res)
+                  .catch(error => {
+                    console.error("Background processing error:", error);
+                  });
+                
+                resolve();
+              } catch (error) {
+                console.error("Error in image upload handler:", error);
+                reject(error);
               }
-              
-              // Process the images - don't await, just let it run
-              addMultipleImages(req, res)
-                .catch(error => {
-                  console.error("Background processing error:", error);
-                });
-              
-              resolve();
-            } catch (error) {
-              console.error("Error in image upload handler:", error);
-              reject(error);
-            }
+            });
           });
-        })
         });
         break;
       }
