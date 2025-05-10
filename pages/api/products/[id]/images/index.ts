@@ -22,17 +22,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
     return res.status(200).end()
   }
-
-  // Apply CORS middleware first
-  await new Promise<void>((resolve) => {
-    enableCors(req, res, () => resolve())
-  })
+ 
 
   try {
     switch (req.method) {
       case "POST": {
         // Admin only - add multiple images to a product
         await new Promise<void>((resolve, reject) => {
+          enableCors(req, res, async () => {
           requireAdmin(req, res, async () => {
             try {
               // Acknowledge receipt immediately
@@ -60,6 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               reject(error);
             }
           });
+        })
         });
         break;
       }
