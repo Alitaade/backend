@@ -18,6 +18,7 @@ import {
   forceDeleteProduct,
   calculateTotalStock,
   updateProductTotalStock,
+  canDeleteProduct,
 } from "../models/product"
 import { ensureImageDimensions, optimizeBase64Image } from "../utils/image-utils"
 import { getAllCategories } from "../models/category"
@@ -85,7 +86,7 @@ export const forceDeleteExistingProduct = async (req: NextApiRequest, res: NextA
   }
 }
 
-// Update the deleteExistingProduct function to try normal delete first
+// Update the deleteExistingProduct function to properly handle foreign key constraints
 export const deleteExistingProduct = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     const { id } = req.query
@@ -97,30 +98,41 @@ export const deleteExistingProduct = async (req: NextApiRequest, res: NextApiRes
     const productId = Number.parseInt(id as string)
 
     try {
-      // Try normal delete first
-      const success = await deleteProduct(productId)
+      // First check if the product can be safely deleted
+      const { canDelete, message } = await canDeleteProduct(productId)
 
-      if (success) {
-        return res.status(200).json({ message: "Product deleted successfully" })
-      } else {
-        return res.status(404).json({ error: "Product not found" })
-      }
-    } catch (error) {
-      // If normal delete fails due to foreign key constraint
-      if (error.code === "23503") {
-        return res.status(400).json({
-          error: "Cannot delete product because it is referenced in orders",
-          constraint: error.constraint,
-          detail: error.detail,
+      if (!canDelete) {
+        // If it can't be deleted normally, inform the client
+        return res.status(409).json({
+          error: message || "Cannot delete product because it is referenced in orders",
           requiresForceDelete: true,
+          productId,
         })
       }
 
+      // If it can be deleted normally, proceed
+      const success = await deleteProduct(productId)
+
+      if (!success) {
+        return res.status(404).json({ error: "Product not found" })
+      }
+
+      return res.status(200).json({ message: "Product deleted successfully" })
+    } catch (error) {
+      // Check for foreign key constraint violation
+      if (error.code === "23503") {
+        return res.status(409).json({
+          error: "Cannot delete product because it is referenced in orders",
+          detail: error.detail,
+          requiresForceDelete: true,
+          productId,
+        })
+      }
       throw error
     }
   } catch (error) {
     console.error("Error deleting product:", error)
-    return res.status(500).json({ error: "Internal server error" })
+    return res.status(500).json({ error: "Internal server error", details: error.message })
   }
 }
 
@@ -752,7 +764,7 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
 
                 // Optimize the image while maintaining high quality
                 const optimizedBase64 = await optimizeBase64Image(base64Data, {
-                  quality: 95, // High quality
+                  quality: 100, // High quality
                   format: mimeType.includes("png") ? "png" : "jpeg",
                 })
 

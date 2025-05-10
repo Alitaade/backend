@@ -2,6 +2,15 @@ import type { NextApiRequest, NextApiResponse } from "next"
 import { getProduct, updateExistingProduct, deleteExistingProduct } from "../../../controllers/product-controller"
 import { requireAdmin, enableCors } from "../../../middleware/auth-middleware"
 
+// Increase the bodyParser limit for this specific API route
+export const config = {
+  api: {
+    responseLimit: "10mb",
+    bodyParser: {
+      sizeLimit: "10mb",
+    },
+  },
+}
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Handle preflight OPTIONS request
   if (req.method === "OPTIONS") {

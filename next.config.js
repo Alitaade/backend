@@ -5,6 +5,15 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true, // Suppresses TS errors in production builds
   },
+  images: {
+    unoptimized: true,
+  },
+  api: {
+    responseLimit: "10mb", // Increase API response limit to 10MB
+    bodyParser: {
+      sizeLimit: "10mb", // Increase body parser limit to 10MB
+    },
+  },
   async headers() {
     return [
       {
