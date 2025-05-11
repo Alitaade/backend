@@ -8,6 +8,10 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  experimental: {
+    // Reduces issues with router during static generation
+    appDocumentPreloading: false,
+  },
   output: "standalone", // Updated from experimental.outputStandalone
   api: {
     responseLimit: "10mb", // Increase API response limit to 10MB
