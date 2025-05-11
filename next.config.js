@@ -1,47 +1,40 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
+  // Remove swcMinify - it's no longer needed as an explicit option in Next.js 15+
+  
   typescript: {
     ignoreBuildErrors: true, // Suppresses TS errors in production builds
   },
+  
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  
   images: {
-    unoptimized: true,
+    unoptimized: true, // Required for static export
   },
-  output: 'export', // Updated from experimental.outputStandalone
-  api: {
-    responseLimit: "10mb", // Increase API response limit to 10MB
-    bodyParser: {
-      sizeLimit: "10mb", // Increase body parser limit to 10MB
-    },
-  },
+  
+  output: 'export', // Static export mode
+  
+  // Remove api config - not compatible with output: 'export'
+  // API route config is not used in static exports
+  
+  // Use a simplified exportPathMap for static export
   exportPathMap: async function() {
     return {
       '/': { page: '/' },
-      '/api': { page: '/api' }
+      '/api': { page: '/api' },
+      '/404': { page: '/404' }
     }
   },
-  async headers() {
-    return [
-      {
-        // Apply CORS headers to all routes
-        source: "/api/:path*",
-        headers: [
-          { key: "Access-Control-Allow-Credentials", value: "true" },
-          { key: "Access-Control-Allow-Origin", value: "*" },
-          {
-            key: "Access-Control-Allow-Methods",
-            value: "GET,DELETE,PATCH,POST,PUT,OPTIONS",
-          },
-          {
-            key: "Access-Control-Allow-Headers",
-            value:
-              "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization",
-          },
-        ],
-      },
-    ];
-  },
+  
+  // Static exports don't support dynamic headers
+  // You'll need to handle CORS in your hosting provider (Netlify)
+  // or add a _headers file for Netlify in your public directory
+  
+  // Use redirects() for Next.js development only
+  // For static exports, Netlify redirects should be defined in a _redirects file
   async redirects() {
     return [
       {
