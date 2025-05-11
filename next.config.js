@@ -1,20 +1,22 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone', // For server-only deployment
+  output: 'standalone',
   reactStrictMode: false,
-  typescript: { ignoreBuildErrors: true },
-  eslint: { ignoreDuringBuilds: true },
   
-  // Disable all static generation
+  // Disable all frontend features
   experimental: {
-    outputFileTracingExcludes: { '*': ['**/*'] }
+    outputFileTracingExcludes: { '*': ['**/*.html', '**/*.css', '**/*.js'] }
   },
   
-  // API config
+  // API-specific settings
   api: {
     bodyParser: { sizeLimit: "10mb" },
     externalResolver: true
-  }
+  },
+  
+  // Disable static generation
+  skipTrailingSlashRedirect: true,
+  skipMiddlewareUrlNormalize: true
 }
 
 module.exports = nextConfig
