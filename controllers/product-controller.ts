@@ -29,7 +29,7 @@ import { v4 as uuidv4 } from "uuid"
 // Config for file upload endpoints to disable body parsing
 export const config = {
   api: {
-    responseLimit: '400mb',
+    responseLimit: '10mb',
     bodyParser: false,
   },
 }

@@ -16,12 +16,10 @@ const nextConfig = {
     bodyParser: {
       sizeLimit: "500mb", // For incoming requests
     },
-    responseLimit: "050mb", // Increase the response limit to 50MB
+    responseLimit: "500mb", // Increase the response limit to 50MB
   },
   experimental: {
     largePageDataBytes: 900 * 1000 * 1000, // 128MB, for large page data (props)
-    // Enable compression for all responses
-    compress: true,
   },
   async headers() {
     return [
