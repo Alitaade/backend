@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "seed": "ts-node database/seed.ts",
-    "tsc": "echo 'Skipping tsc check for Netlify'",
+    "tsc": "echo 'Skipping tsc check for Netlify'"
   },
   "keywords": [
     "ecommerce",
