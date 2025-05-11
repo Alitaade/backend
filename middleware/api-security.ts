@@ -1,20 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-
-// List of allowed origins for CORS
-const allowedOrigins = [
-  "https://onlu.vercel.app",
-  "https://www.onlu.vercel.app",
-  "https://pro-project-gilt.vercel.app",
-  "https://www.pro-project-gilt.vercel.app",
-  "https://admin-frontends.vercel.app",
-  // Add your production domains here
-];
-
-// Add localhost for development
-if (process.env.NODE_ENV === "development") {
-  allowedOrigins.push("http://localhost:3000");
-  allowedOrigins.push("http://localhost:3001");
-}
+import { allowedOrigins } from "./origins"; // Import allowedOrigins from separate file
 
 // API key validation
 export const validateApiKey = (

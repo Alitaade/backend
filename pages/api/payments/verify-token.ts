@@ -1,33 +1,19 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { verifyToken, getTokenUsageInfo } from "../../../models/token";
 import { getOrderByOrderNumber } from "../../../models/order";
+import { allowedOrigins } from "../../../middleware/origins";
 
 // Define the handler function
 async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Handle CORS directly in this file
-  // Set CORS headers for all requests
+  // Handle CORS using the centralized configuration
   const origin = req.headers.origin || "";
-  const allowedOrigins = [
-    "https://onlu.vercel.app",
-    "https://www.onlu.vercel.app",
-    "https://pro-project-gilt.vercel.app",
-    "https://www.pro-project-gilt.vercel.app",
-  ];
-
-  // Add localhost for development
-  if (process.env.NODE_ENV === "development") {
-    allowedOrigins.push("http://localhost:3000");
-    allowedOrigins.push("http://localhost:3001");
-  }
-
-  // Check if the origin is allowed
-  if (
-    allowedOrigins.includes(origin) ||
-    process.env.NODE_ENV === "development"
-  ) {
+  
+  // Check if the origin is in our allowed list
+  if (origin && allowedOrigins.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
   } else {
-    res.setHeader("Access-Control-Allow-Origin", allowedOrigins[0]);
+    // Fallback to the first allowed origin
+    res.setHeader("Access-Control-Allow-Origin", allowedOrigins[0] || "");
   }
 
   // Set other CORS headers

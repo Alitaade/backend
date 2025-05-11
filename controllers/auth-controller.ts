@@ -11,8 +11,8 @@ import {
 } from "../models/user"
 
 // JWT configuration
-const JWT_SECRET: string = process.env.JWT_SECRET || "your_jwt_secret_key"
-const JWT_EXPIRES_IN: string | number = process.env.JWT_EXPIRES_IN || "7d"
+const JWT_SECRET: string = process.env.JWT_SECRET
+const JWT_EXPIRES_IN: string | number = process.env.JWT_EXPIRES_IN
 // Google OAuth client
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
 

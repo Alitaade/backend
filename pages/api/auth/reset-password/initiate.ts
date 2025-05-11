@@ -1,13 +1,17 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { initiatePasswordReset } from "../../../../controllers/password-reset-controller";
+import { allowedOrigins } from "../../../../middleware/origins";
 
 // Helper function to handle CORS
-const setCorsHeaders = (res: NextApiResponse) => {
+const setCorsHeaders = (res: NextApiResponse, req: NextApiRequest) => {
+  const origin = req.headers.origin;
+  
+  // Check if the origin is in our allowed list
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  
   res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader(
-    "Access-Control-Allow-Origin",
-    "https://pro-project-gilt.vercel.app"
-  );
   res.setHeader(
     "Access-Control-Allow-Methods",
     "GET,OPTIONS,PATCH,DELETE,POST,PUT"
@@ -23,7 +27,7 @@ export default async function handler(
   res: NextApiResponse
 ) {
   // Set CORS headers for all requests
-  setCorsHeaders(res);
+  setCorsHeaders(res, req);
 
   // Handle preflight OPTIONS request
   if (req.method === "OPTIONS") {

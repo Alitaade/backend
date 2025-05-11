@@ -1,11 +1,24 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { googleAuth } from "../../../controllers/auth-controller"
+import { allowedOrigins } from "../../../middleware/origins"
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Set CORS headers for all requests (not just OPTIONS)
-  res.setHeader("Access-Control-Allow-Origin", "https://pro-project-gilt.vercel.app")
+// Helper function to handle CORS
+const setCorsHeaders = (res: NextApiResponse, req: NextApiRequest) => {
+  const origin = req.headers.origin;
+  
+  // Check if the origin is in our allowed list
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+  res.setHeader("Access-Control-Allow-Credentials", "true")
+}
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Set CORS headers for all requests
+  setCorsHeaders(res, req)
   
   // Handle CORS preflight request (OPTIONS)
   if (req.method === "OPTIONS") {
