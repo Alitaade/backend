@@ -11,16 +11,15 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // Configure both incoming and outgoing request limits
   api: {
     bodyParser: {
-      sizeLimit: "500mb", // For incoming requests
+      sizeLimit: '500mb', // For incoming requests
     },
-    responseLimit: "500mb", // Increase the response limit to 50MB
+    responseLimit: false, // For outgoing responses (disables the limit)
+   
+    // responseLimit: '50mb', // Adjust as needed
   },
-  experimental: {
-    largePageDataBytes: 900 * 1000 * 1000, // 128MB, for large page data (props)
-  },
+  output: "standalone", // Updated from experimental.outputStandalone
   async headers() {
     return [
       {
@@ -38,9 +37,6 @@ const nextConfig = {
             value:
               "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, X-API-Key, x-api-key",
           },
-          // Add compression-related headers
-          { key: "Content-Encoding", value: "gzip" },
-          { key: "Accept-Encoding", value: "gzip, deflate, br" },
         ],
       },
     ]
