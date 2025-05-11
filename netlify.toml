@@ -1,7 +1,10 @@
 [build]
   command = "npm run build"
-  publish = ".next"
-  environment = { NEXT_DISABLE_CACHE = "1" }
+  publish = ".next/server" # Only deploy server files
+  functions = ".next/server/pages/api" # Route API requests
   
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+  [functions]
+  node_bundler = "esbuild"
