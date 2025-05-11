@@ -1,3 +1,4 @@
+// File: pages/api/index.js
 import type { NextApiRequest, NextApiResponse } from "next";
 import { checkConnection } from "../../database/connection";
 
