@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { createNewProduct, getProducts } from "../../../controllers/product-controller"
 import { requireAdmin, enableCors } from "../../../middleware/auth-middleware"
+
 // Config for file upload endpoints to disable body parsing
 export const config = {
   api: {
@@ -12,7 +13,7 @@ export const config = {
 // Main API handler
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Set CORS headers for all requests
-  res.setHeader("Access-Control-Allow-Origin", "*") // Replace with specific origin in production
+  res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
@@ -22,19 +23,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Check for query parameter issues and fix them
+    // Clone the original query
     const originalQuery = { ...req.query };
     console.log("Original request query:", originalQuery);
     
     // Fix for potential nested param formats like params[all] instead of all
-    if (req.query['params[all]'] === 'true') {
-      req.query.all = 'true';
+    if (req.query['params[all]'] !== undefined) {
+      req.query.all = req.query['params[all]'];
       delete req.query['params[all]'];
     }
 
-    // Handle different ways "all" might be passed
-    if (req.query.all === '' || req.query.all === 'true') {
-      req.query.all = 'true';
+    // Normalize the 'all' parameter
+    if (req.query.all !== undefined) {
+      req.query.all = req.query.all === '' || req.query.all === 'true' ? 'true' : 'false';
     }
     
     // Normalize query param: map ?category= to category_id
@@ -67,6 +68,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Handle GET request: Public
     if (req.method === "GET") {
+      // Ensure we don't return too much data even when all=true
+      if (req.query.all === 'true') {
+        // Set a reasonable maximum limit when fetching all products
+        req.query.limit = '9000'; // Adjust this number based on your needs
+        req.query.offset = '0';
+      }
+      
       return await getProducts(req, res)
     }
 
