@@ -23,26 +23,10 @@ const nextConfig = {
   exportPathMap: async function() {
     return {
       '/': { page: '/' },
-      '/api': { page: '/api' },
-      '/404': { page: '/404' }
+      '/api': { page: '/api' }
     }
   },
-  
-  // Static exports don't support dynamic headers
-  // You'll need to handle CORS in your hosting provider (Netlify)
-  // or add a _headers file for Netlify in your public directory
-  
-  // Use redirects() for Next.js development only
-  // For static exports, Netlify redirects should be defined in a _redirects file
-  async redirects() {
-    return [
-      {
-        source: "/",
-        destination: "/api",
-        permanent: true,
-      },
-    ];
-  },
+
 };
 
 module.exports = nextConfig;
