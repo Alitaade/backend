@@ -1,6 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { createNewProduct, getProducts } from "../../../controllers/product-controller"
 import { requireAdmin, enableCors } from "../../../middleware/auth-middleware"
+// Config for file upload endpoints to disable body parsing
+export const config = {
+  api: {
+    responseLimit: '40mb',
+    bodyParser: false,
+  },
+}
 
 // Main API handler
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

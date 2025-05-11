@@ -12,6 +12,18 @@ const nextConfig = {
     unoptimized: true,
   },
   output: "standalone", // Updated from experimental.outputStandalone
+  // Configure both incoming and outgoing request limits
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb', // For incoming requests
+    },
+    responseLimit: false, // For outgoing responses (disables the limit)
+    // Alternative: set a specific limit
+    // responseLimit: '50mb', // Adjust as needed
+  },
+  experimental: {
+    largePageDataBytes: 128 * 1000 * 1000, // 128MB, for large page data (props)
+  },
   async headers() {
     return [
       {
