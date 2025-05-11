@@ -11,16 +11,19 @@ export const config = {
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Handle preflight OPTIONS request
-  if (req.method === "OPTIONS") {
-    res.setHeader("Access-Control-Allow-Origin", "*"); // Replace with specific origin in production
-    res.setHeader("Access-Control-Allow-Methods", "PUT, DELETE, GET, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key");
-    return res.status(200).end();
-  }
-
+  // Add CORS headers to prevent preflight delays
+  res.setHeader("Access-Control-Allow-Origin", "*")
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key")
   enableCors(req, res, async () => {
     requireAdmin(req, res, async () => {
+      
+  // Handle OPTIONS request immediately
+  if (req.method === "OPTIONS") {
+    return res.status(200).end()
+  }
+
+  
       if (req.method !== "POST") {
         return res.status(405).json({ error: "Method not allowed" });
       }
