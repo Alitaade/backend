@@ -15,7 +15,6 @@ const nextConfig = {
     unoptimized: true, // Required for static export
   },
   
-  output: 'export', // Static export mode
   
   // Remove api config - not compatible with output: 'export'
   // API route config is not used in static exports
