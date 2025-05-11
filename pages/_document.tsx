@@ -1,16 +1,19 @@
-import { Html, Head, Main, NextScript } from 'next/document'
+import Document, { Html, Head, Main, NextScript } from 'next/document'
 
-// This is the correct place to use Html, Head, Main, and NextScript components
-export default function Document() {
-  return (
-    <Html lang="en">
-      <Head>
-        {/* Add any global meta tags, fonts, etc. here */}
-      </Head>
-      <body>
-        <Main />
-        <NextScript />
-      </body>
-    </Html>
-  )
+class MyDocument extends Document {
+  render() {
+    return (
+      <Html lang="en">
+        <Head>
+          {/* Add any global meta tags, fonts, etc. here */}
+        </Head>
+        <body>
+          <Main />
+          <NextScript />
+        </body>
+      </Html>
+    )
+  }
 }
+
+export default MyDocument
