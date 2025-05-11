@@ -1,32 +1,38 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-  // Remove swcMinify - it's no longer needed as an explicit option in Next.js 15+
+  // Disable all frontend-related features
+  output: 'standalone', // For server-only deployment
+  reactStrictMode: false,
+  swcMinify: true,
   
-  typescript: {
-    ignoreBuildErrors: true, // Suppresses TS errors in production builds
+  // Disable build-time checks
+  typescript: { ignoreBuildErrors: true },
+  eslint: { ignoreDuringBuilds: true },
+  
+  // API-specific config
+  api: {
+    bodyParser: { sizeLimit: "10mb" },
+    responseLimit: "10mb",
+    externalResolver: true // Important for serverless functions
   },
   
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  
-  images: {
-    unoptimized: true, // Required for static export
-  },
-  
-  
-  // Remove api config - not compatible with output: 'export'
-  // API route config is not used in static exports
-  
-  // Use a simplified exportPathMap for static export
-  exportPathMap: async function() {
-    return {
-      '/': { page: '/' },
-      '/api': { page: '/api' }
+  // Disable all static generation
+  experimental: {
+    outputFileTracingExcludes: { 
+      '*': ['**/*'] // Skip all frontend files
     }
   },
+  
+  // CORS headers
+  async headers() {
+    return [{
+      source: "/api/:path*",
+      headers: [
+        { key: "Access-Control-Allow-Origin", value: "*" },
+        { key: "Access-Control-Allow-Methods", value: "GET,POST,PUT,DELETE,OPTIONS" }
+      ]
+    }]
+  }
+}
 
-};
-
-module.exports = nextConfig;
+module.exports = nextConfig
