@@ -8,16 +8,18 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  experimental: {
-    // Reduces issues with router during static generation
-    appDocumentPreloading: false,
-  },
   output: "standalone", // Updated from experimental.outputStandalone
   api: {
     responseLimit: "10mb", // Increase API response limit to 10MB
     bodyParser: {
       sizeLimit: "10mb", // Increase body parser limit to 10MB
     },
+  },
+  exportPathMap: async function() {
+    return {
+      '/': { page: '/' },
+      '/api': { page: '/api' }
+    }
   },
   async headers() {
     return [

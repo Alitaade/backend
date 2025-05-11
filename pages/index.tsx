@@ -1,12 +1,17 @@
-"use client"
-import { useEffect } from "react"
-import { useRouter } from "next/router" // Changed back to next/router for Pages Router
-export default function Home() {
-  const router = useRouter()
-  useEffect(() => {
-    // Redirect to API documentation or status page
-    router.push("/api")
-  }, [router])
+import { GetServerSideProps, NextPage } from 'next'
+
+// Server-side redirect using getServerSideProps
+export const getServerSideProps: GetServerSideProps = async () => {
+  return {
+    redirect: {
+      destination: '/api',
+      permanent: true, // or false for temporary redirect
+    },
+  }
+}
+
+// This component won't actually be rendered due to the redirect
+const Home: NextPage = () => {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center">
       <h1 className="text-2xl font-bold">Fashion E-commerce API</h1>
@@ -14,3 +19,5 @@ export default function Home() {
     </div>
   )
 }
+
+export default Home
