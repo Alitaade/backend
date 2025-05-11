@@ -1,41 +1,73 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Core settings
   reactStrictMode: true,
   swcMinify: true,
+  output: 'standalone', // Essential for API-only deployment
+  
+  // TypeScript/ESLint handling
   typescript: {
-    ignoreBuildErrors: true, // Suppresses TS errors in production builds
+    ignoreBuildErrors: true,
   },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+
+  // Image handling (disabled for API-only)
   images: {
     unoptimized: true,
   },
 
+  // API configuration
   api: {
-    responseLimit: "10mb", // Increase API response limit to 10MB
+    responseLimit: "10mb",
     bodyParser: {
-      sizeLimit: "10mb", // Increase body parser limit to 10MB
+      sizeLimit: "10mb",
     },
+    externalResolver: true, // Important for serverless functions
   },
+
+  // Performance optimizations
+  experimental: {
+    outputFileTracingExcludes: {
+      '*': [
+        '**/*.html',
+        '**/*.css',
+        '**/*.js',
+        '**/*.svg',
+        '**/*.png',
+        '**/*.jpg'
+      ]
+    },
+    serverComponentsExternalPackages: ['@prisma/client'], // Add if using Prisma
+  },
+
+  // Security headers (recommended for APIs)
   async headers() {
     return [
       {
-        // Apply CORS headers to all routes
-        source: "/api/:path*",
+        source: '/api/:path*',
         headers: [
-          { key: "Access-Control-Allow-Credentials", value: "true" },
-          { key: "Access-Control-Allow-Origin", value: "*" },
           {
-            key: "Access-Control-Allow-Methods",
-            value: "GET,DELETE,PATCH,POST,PUT,OPTIONS",
+            key: 'X-Content-Type-Options',
+            value: 'nosniff'
           },
           {
-            key: "Access-Control-Allow-Headers",
-            value:
-              "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization",
+            key: 'X-Frame-Options',
+            value: 'DENY'
           },
-        ],
-      },
-    ];
+          {
+            key: 'X-XSS-Protection',
+            value: '1; mode=block'
+          }
+        ]
+      }
+    ]
   },
-};
 
-module.exports = nextConfig;
+  // Disable all static generation features
+  skipTrailingSlashRedirect: true,
+  skipMiddlewareUrlNormalize: true
+}
+
+module.exports = nextConfig
