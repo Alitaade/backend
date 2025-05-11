@@ -1,8 +1,7 @@
-import { NextPage } from 'next'
 import Head from 'next/head'
 
 // Static page with meta refresh (most reliable solution)
-const Home: NextPage = () => {
+const Home = () => {
   return (
     <>
       <Head>

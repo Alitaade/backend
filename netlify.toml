@@ -1,6 +1,7 @@
 [build]
   command = "npm run build"
   publish = ".next"
-
+  environment = { NEXT_DISABLE_CACHE = "1" }
+  
 [[plugins]]
   package = "@netlify/plugin-nextjs"
