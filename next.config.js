@@ -11,16 +11,15 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  output: "standalone", // Updated from experimental.outputStandalone
   // Configure both incoming and outgoing request limits
   api: {
     bodyParser: {
-      sizeLimit: "50mb", // For incoming requests
+      sizeLimit: "500mb", // For incoming requests
     },
-    responseLimit: "50mb", // Increase the response limit to 50MB
+    responseLimit: "050mb", // Increase the response limit to 50MB
   },
   experimental: {
-    largePageDataBytes: 128 * 1000 * 1000, // 128MB, for large page data (props)
+    largePageDataBytes: 900 * 1000 * 1000, // 128MB, for large page data (props)
     // Enable compression for all responses
     compress: true,
   },

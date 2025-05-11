@@ -19,18 +19,21 @@ import {
   calculateTotalStock,
   updateProductTotalStock,
 } from "../models/product"
-import { ensureImageDimensions, processImagesInChunks } from "../utils/image-utils"
+import { ensureImageDimensions, optimizeBase64Image, processImagesInChunks } from "../utils/image-utils"
 import { getAllCategories } from "../models/category"
 import formidable from "formidable"
+import path from "path"
 import fs from "fs"
+import { v4 as uuidv4 } from "uuid"
 
 // Config for file upload endpoints to disable body parsing
 export const config = {
   api: {
-    responseLimit: "40mb",
+    responseLimit: '400mb',
     bodyParser: false,
   },
 }
+
 
 // Add new force delete endpoint handler
 export const forceDeleteExistingProduct = async (req: NextApiRequest, res: NextApiResponse) => {
@@ -63,7 +66,7 @@ export const forceDeleteExistingProduct = async (req: NextApiRequest, res: NextA
 }
 
 /**
- * API handler to delete a product
+ * API handler to delete a product 
  * Uses the deleteProduct function which handles regular and force delete scenarios
  */
 export const deleteExistingProduct = async (req: NextApiRequest, res: NextApiResponse) => {
@@ -75,7 +78,7 @@ export const deleteExistingProduct = async (req: NextApiRequest, res: NextApiRes
     }
 
     const productId = Number.parseInt(id as string)
-
+    
     if (isNaN(productId)) {
       return res.status(400).json({ error: "Invalid product ID format" })
     }
@@ -92,9 +95,9 @@ export const deleteExistingProduct = async (req: NextApiRequest, res: NextApiRes
     })
   } catch (error) {
     console.error("Error deleting product:", error)
-    return res.status(500).json({
-      error: "Internal server error",
-      details: error.message || "Unknown error occurred",
+    return res.status(500).json({ 
+      error: "Internal server error", 
+      details: error.message || "Unknown error occurred"
     })
   }
 }
@@ -202,19 +205,9 @@ export const getProductTotalStock = async (req: NextApiRequest, res: NextApiResp
 }
 
 // Keep other functions as they are...
-export const getProducts = async (req: NextApiRequest, res: NextApiResponse, returnDataOnly = false) => {
+export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
-    const {
-      limit = "10",
-      offset = "0",
-      category_id,
-      sort = "id",
-      order = "asc",
-      page = "1",
-      all = "",
-      chunk = "0",
-      chunkSize = "10",
-    } = req.query
+    const { limit = "10", offset = "0", category_id, sort = "id", order = "asc", page = "1", all = "" } = req.query
 
     console.log("Processing product request with params:", {
       limit,
@@ -224,50 +217,11 @@ export const getProducts = async (req: NextApiRequest, res: NextApiResponse, ret
       order,
       page,
       all,
-      chunk,
-      chunkSize,
     })
 
     // If the "all" parameter is provided, get all products without pagination
     if (all === "true") {
       console.log("Getting ALL products without pagination")
-
-      // If chunking is requested, handle it
-      if (chunk !== undefined) {
-        const chunkIndex = Number.parseInt(chunk as string, 10) || 0
-        const chunkSizeNum = Number.parseInt(chunkSize as string, 10) || 50
-
-        // Get total count first
-        const totalCount = await countProducts(category_id ? Number.parseInt(category_id as string) : undefined)
-
-        // Calculate total chunks
-        const totalChunks = Math.ceil(totalCount / chunkSizeNum)
-
-        // Get products for this chunk
-        const products = await getAllProducts(
-          chunkSizeNum,
-          chunkIndex * chunkSizeNum,
-          category_id ? Number.parseInt(category_id as string) : undefined,
-          sort as string,
-          order as string,
-        )
-
-        const responseData = {
-          products,
-          chunk: chunkIndex,
-          totalChunks,
-          chunkSize: chunkSizeNum,
-          total: totalCount,
-        }
-
-        if (returnDataOnly) {
-          return responseData
-        }
-
-        return res.status(200).json(responseData)
-      }
-
-      // Regular "all" request without chunking
       const products = await getAllProductsWithoutPagination(
         category_id ? Number.parseInt(category_id as string) : undefined,
         sort as string,
@@ -275,20 +229,13 @@ export const getProducts = async (req: NextApiRequest, res: NextApiResponse, ret
       )
 
       console.log(`Returning ${products.length} products in 'all' mode`)
-
-      const responseData = {
+      return res.status(200).json({
         products,
         page: 1,
         limit: products.length,
         total: products.length,
         totalPages: 1,
-      }
-
-      if (returnDataOnly) {
-        return responseData
-      }
-
-      return res.status(200).json(responseData)
+      })
     }
 
     // Calculate offset based on page if provided
@@ -317,25 +264,16 @@ export const getProducts = async (req: NextApiRequest, res: NextApiResponse, ret
 
     console.log(`Returning ${products.length} products (page ${pageNum} of ${totalPages}), total: ${totalCount}`)
 
-    const responseData = {
+    return res.status(200).json({
       products,
       page: pageNum,
       limit: limitNum,
       total: totalCount,
       totalPages,
-    }
-
-    if (returnDataOnly) {
-      return responseData
-    }
-
-    return res.status(200).json(responseData)
+    })
   } catch (error) {
     console.error("Error getting products:", error)
-    if (!returnDataOnly) {
-      return res.status(500).json({ error: "Internal server error" })
-    }
-    throw error
+    return res.status(500).json({ error: "Internal server error" })
   }
 }
 
@@ -507,6 +445,7 @@ export const addImageByUrl = async (req: NextApiRequest, res: NextApiResponse) =
   }
 }
 
+
 export const searchProducts = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     const { q } = req.query
@@ -571,7 +510,7 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
     }
 
     const productId = Number.parseInt(id as string)
-
+    
     // Check if the request is multipart/form-data
     const contentType = req.headers["content-type"] || ""
     const isMultipart = contentType.startsWith("multipart/form-data")
@@ -673,9 +612,9 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
               3, // Process 3 files at a time
               (processed, total) => {
                 console.log(`Processed ${processed}/${total} images`)
-              },
-            ).then((results) => {
-              uploadedFiles.push(...results.filter((r) => r !== null))
+              }
+            ).then(results => {
+              uploadedFiles.push(...results.filter(r => r !== null))
             })
 
             // Process URLs in chunks too
@@ -691,7 +630,7 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
                       uploadedFiles.length === 0 && index === 0 && isPrimary,
                       undefined,
                       undefined,
-                      altText,
+                      altText
                     )
                   } catch (error) {
                     console.error(`Error processing URL ${index + 1}:`, error)
@@ -699,9 +638,9 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
                     return null
                   }
                 },
-                5, // Process 5 URLs at a time
-              ).then((results) => {
-                uploadedUrls.push(...results.filter((r) => r !== null))
+                5 // Process 5 URLs at a time
+              ).then(results => {
+                uploadedUrls.push(...results.filter(r => r !== null))
               })
             }
 
@@ -764,7 +703,7 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
                       index === 0 && isPrimary,
                       undefined,
                       undefined,
-                      altText || `Image of product ${productId}`,
+                      altText || `Image of product ${productId}`
                     )
                   } catch (error) {
                     console.error(`Error processing base64 image ${index + 1}:`, error)
@@ -772,9 +711,9 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
                     return null
                   }
                 },
-                4, // Process 4 base64 images at a time
-              ).then((results) => {
-                uploadedFiles.push(...results.filter((r) => r !== null))
+                4 // Process 4 base64 images at a time
+              ).then(results => {
+                uploadedFiles.push(...results.filter(r => r !== null))
               })
             }
 
@@ -792,7 +731,7 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
                       uploadedFiles.length === 0 && index === 0 && isPrimary,
                       undefined,
                       undefined,
-                      altText || `Image of product ${productId}`,
+                      altText || `Image of product ${productId}`
                     )
                   } catch (error) {
                     console.error(`Error processing URL ${index + 1}:`, error)
@@ -800,9 +739,9 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
                     return null
                   }
                 },
-                5, // Process 5 URLs at a time
-              ).then((results) => {
-                uploadedUrls.push(...results.filter((r) => r !== null))
+                5 // Process 5 URLs at a time
+              ).then(results => {
+                uploadedUrls.push(...results.filter(r => r !== null))
               })
             }
 
@@ -814,7 +753,7 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
                 errors: errors.length > 0 ? errors : undefined,
               })
             }
-
+            
             return resolve({
               message: "Image processing complete",
               uploadedFiles,
@@ -837,7 +776,7 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
       return res.status(500).json({ error: `Internal server error: ${error.message}` })
     }
     return {
-      error: `Internal server error: ${error.message}`,
+      error: `Internal server error: ${error.message}`
     }
   }
 }

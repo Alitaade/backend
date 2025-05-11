@@ -1,16 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { createNewProduct, getProducts } from "../../../controllers/product-controller"
 import { requireAdmin, enableCors } from "../../../middleware/auth-middleware"
-import zlib from "zlib"
-import { promisify } from "util"
-
-// Promisify gzip
-const gzipAsync = promisify(zlib.gzip)
-
 // Config for file upload endpoints to disable body parsing
 export const config = {
   api: {
-    responseLimit: "50mb",
+    responseLimit: '40mb',
     bodyParser: false,
   },
 }
@@ -18,10 +12,9 @@ export const config = {
 // Main API handler
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Set CORS headers for all requests
-  res.setHeader("Access-Control-Allow-Origin", "*")
+  res.setHeader("Access-Control-Allow-Origin", "*") // Replace with specific origin in production
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept-Encoding")
-  res.setHeader("Vary", "Accept-Encoding")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
   // Handle preflight OPTIONS request
   if (req.method === "OPTIONS") {
@@ -29,32 +22,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Clone the original query
-    const originalQuery = { ...req.query }
-    console.log("Original request query:", originalQuery)
-
+    // Check for query parameter issues and fix them
+    const originalQuery = { ...req.query };
+    console.log("Original request query:", originalQuery);
+    
     // Fix for potential nested param formats like params[all] instead of all
-    if (req.query["params[all]"] !== undefined) {
-      req.query.all = req.query["params[all]"]
-      delete req.query["params[all]"]
+    if (req.query['params[all]'] === 'true') {
+      req.query.all = 'true';
+      delete req.query['params[all]'];
     }
 
-    // Normalize the 'all' parameter
-    if (req.query.all !== undefined) {
-      req.query.all = req.query.all === "" || req.query.all === "true" ? "true" : "false"
+    // Handle different ways "all" might be passed
+    if (req.query.all === '' || req.query.all === 'true') {
+      req.query.all = 'true';
     }
-
+    
     // Normalize query param: map ?category= to category_id
     if (req.query.category && !req.query.category_id) {
       req.query.category_id = req.query.category
     }
-
-    // Check if client supports compression
-    const acceptEncoding = req.headers["accept-encoding"] || ""
-    const supportsCompression = acceptEncoding.includes("gzip") || acceptEncoding.includes("deflate")
-
+    
     // Log fixed request parameters
-    console.log("Fixed request query:", req.query)
+    console.log("Fixed request query:", req.query);
 
     // Handle POST request: Protected route
     if (req.method === "POST") {
@@ -78,42 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Handle GET request: Public
     if (req.method === "GET") {
-      // Ensure we don't return too much data even when all=true
-      if (req.query.all === "true") {
-        // Set a reasonable maximum limit when fetching all products
-        req.query.limit = "9000" // Adjust this number based on your needs
-        req.query.offset = "0"
-      }
-
-      // Get the products
-      const productsResponse = await getProducts(req, res, true) // Pass true to prevent auto-sending response
-
-      if (productsResponse) {
-        // Apply compression if supported
-        if (supportsCompression) {
-          try {
-            // Compress the response
-            const compressedData = await gzipAsync(JSON.stringify(productsResponse))
-
-            // Set appropriate headers
-            res.setHeader("Content-Encoding", "gzip")
-            res.setHeader("Content-Type", "application/json")
-
-            // Send compressed response
-            return res.status(200).send(compressedData)
-          } catch (compressionError) {
-            console.error("Error compressing response:", compressionError)
-            // Fall back to uncompressed response
-            return res.status(200).json(productsResponse)
-          }
-        } else {
-          // Send uncompressed response
-          return res.status(200).json(productsResponse)
-        }
-      }
-
-      // If we get here, the response was already sent by getProducts
-      return
+      return await getProducts(req, res)
     }
 
     // Fallback for unsupported methods
