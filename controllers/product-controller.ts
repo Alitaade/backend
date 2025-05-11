@@ -213,7 +213,7 @@ export const getProducts = async (req: NextApiRequest, res: NextApiResponse, ret
       page = "1",
       all = "",
       chunk = "0",
-      chunkSize = "50",
+      chunkSize = "10",
     } = req.query
 
     console.log("Processing product request with params:", {
