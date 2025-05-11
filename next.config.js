@@ -8,7 +8,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  output: "standalone", // Updated from experimental.outputStandalone
+  output: 'export', // Updated from experimental.outputStandalone
   api: {
     responseLimit: "10mb", // Increase API response limit to 10MB
     bodyParser: {
