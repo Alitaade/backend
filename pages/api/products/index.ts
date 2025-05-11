@@ -1,68 +1,62 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { createNewProduct, getProducts } from "../../../controllers/product-controller"
 import { requireAdmin, enableCors } from "../../../middleware/auth-middleware"
-import compression from "compression"
+import zlib from "zlib"
+import { promisify } from "util"
 
-// Config with compression
+// Promisify gzip
+const gzipAsync = promisify(zlib.gzip)
+
+// Config for file upload endpoints to disable body parsing
 export const config = {
   api: {
+    responseLimit: "50mb",
     bodyParser: false,
-    responseLimit: '6mb', // Stay within platform limits
   },
 }
 
-// Enable compression middleware
-const compressionMiddleware = compression({
-  level: 9, // Maximum compression level
-  threshold: 0, // Compress all responses
-})
-
+// Main API handler
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Apply compression to all responses
-  await new Promise<void>((resolve, reject) => {
-    compressionMiddleware(req, res, (result) => {
-      if (result instanceof Error) {
-        return reject(result)
-      }
-      return resolve()
-    })
-  })
-  
-  // CORS headers
+  // Set CORS headers for all requests
   res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept-Encoding")
+  res.setHeader("Vary", "Accept-Encoding")
 
+  // Handle preflight OPTIONS request
   if (req.method === "OPTIONS") {
     return res.status(200).end()
   }
 
   try {
-    // Normalize query parameters
-    console.log("Original request query:", req.query)
-    
-    // Fix for potential nested param formats
-    Object.keys(req.query).forEach(key => {
-      if (key.startsWith('params[') && key.endsWith(']')) {
-        const actualKey = key.substring(7, key.length - 1)
-        req.query[actualKey] = req.query[key]
-        delete req.query[key]
-      }
-    })
-    
-    // Map category to category_id for backward compatibility
+    // Clone the original query
+    const originalQuery = { ...req.query }
+    console.log("Original request query:", originalQuery)
+
+    // Fix for potential nested param formats like params[all] instead of all
+    if (req.query["params[all]"] !== undefined) {
+      req.query.all = req.query["params[all]"]
+      delete req.query["params[all]"]
+    }
+
+    // Normalize the 'all' parameter
+    if (req.query.all !== undefined) {
+      req.query.all = req.query.all === "" || req.query.all === "true" ? "true" : "false"
+    }
+
+    // Normalize query param: map ?category= to category_id
     if (req.query.category && !req.query.category_id) {
       req.query.category_id = req.query.category
     }
-    
-    // Keep the 'all' parameter's behavior - but optimize what we return
-    if (req.query.all !== undefined) {
-      req.query.all = req.query.all === '' || req.query.all === 'true' ? 'true' : 'false'
-    }
-    
-    console.log("Normalized request query:", req.query)
 
-    // Handle POST request (unchanged)
+    // Check if client supports compression
+    const acceptEncoding = req.headers["accept-encoding"] || ""
+    const supportsCompression = acceptEncoding.includes("gzip") || acceptEncoding.includes("deflate")
+
+    // Log fixed request parameters
+    console.log("Fixed request query:", req.query)
+
+    // Handle POST request: Protected route
     if (req.method === "POST") {
       return new Promise<void>((resolve) => {
         enableCors(req, res, () => {
@@ -82,24 +76,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     }
 
-    // Handle GET request with optimized data
+    // Handle GET request: Public
     if (req.method === "GET") {
-      // When 'all' is true, we'll need to be smart about what we send
-      if (req.query.all === 'true') {
-        // First, check for fields parameter that can reduce data
-        const fields = req.query.fields || 'minimal';
-        req.query.fields = fields;
-        
-        // Set a large but reasonable limit for a single request
-        // With compression, we can return more data in the same size
-        req.query.limit = '2000'; // With compression, this should work for most cases
-        req.query.offset = '0';
+      // Ensure we don't return too much data even when all=true
+      if (req.query.all === "true") {
+        // Set a reasonable maximum limit when fetching all products
+        req.query.limit = "9000" // Adjust this number based on your needs
+        req.query.offset = "0"
       }
-      
-      return await getProducts(req, res)
+
+      // Get the products
+      const productsResponse = await getProducts(req, res, true) // Pass true to prevent auto-sending response
+
+      if (productsResponse) {
+        // Apply compression if supported
+        if (supportsCompression) {
+          try {
+            // Compress the response
+            const compressedData = await gzipAsync(JSON.stringify(productsResponse))
+
+            // Set appropriate headers
+            res.setHeader("Content-Encoding", "gzip")
+            res.setHeader("Content-Type", "application/json")
+
+            // Send compressed response
+            return res.status(200).send(compressedData)
+          } catch (compressionError) {
+            console.error("Error compressing response:", compressionError)
+            // Fall back to uncompressed response
+            return res.status(200).json(productsResponse)
+          }
+        } else {
+          // Send uncompressed response
+          return res.status(200).json(productsResponse)
+        }
+      }
+
+      // If we get here, the response was already sent by getProducts
+      return
     }
 
-    // Method not allowed
+    // Fallback for unsupported methods
     res.setHeader("Allow", ["GET", "POST", "OPTIONS"])
     return res.status(405).json({ error: "Method not allowed" })
   } catch (error) {

@@ -15,14 +15,14 @@ const nextConfig = {
   // Configure both incoming and outgoing request limits
   api: {
     bodyParser: {
-      sizeLimit: '50mb', // For incoming requests
+      sizeLimit: "50mb", // For incoming requests
     },
-    responseLimit: false, // For outgoing responses (disables the limit)
-    // Alternative: set a specific limit
-    // responseLimit: '50mb', // Adjust as needed
+    responseLimit: "50mb", // Increase the response limit to 50MB
   },
   experimental: {
     largePageDataBytes: 128 * 1000 * 1000, // 128MB, for large page data (props)
+    // Enable compression for all responses
+    compress: true,
   },
   async headers() {
     return [
@@ -41,6 +41,9 @@ const nextConfig = {
             value:
               "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, X-API-Key, x-api-key",
           },
+          // Add compression-related headers
+          { key: "Content-Encoding", value: "gzip" },
+          { key: "Accept-Encoding", value: "gzip, deflate, br" },
         ],
       },
     ]
