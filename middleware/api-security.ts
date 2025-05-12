@@ -47,7 +47,7 @@ export const corsMiddleware = (
   // Set other CORS headers
   res.setHeader(
     "Access-Control-Allow-Methods",
-    "GET, POST, PUT, DELETE, OPTIONS"
+    "GET, POST, PUT, DELETE, PATCH, OPTIONS"
   );
   // Update the Access-Control-Allow-Headers list
   res.setHeader(
