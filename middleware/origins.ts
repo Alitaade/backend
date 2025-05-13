@@ -4,12 +4,12 @@
  */
 export const allowedOrigins: string[] = [
   // Frontend URL (required)
-  process.env.FRONTEND_URL || "https://www.pro-project-gilt.vercel.app",
+  process.env.FRONTEND_URL || "",
   
   // Backend URL (required)
-  process.env.ADMIN_ORIGIN || "https://www.admin-frontends.vercel.app",
+  process.env.ADMIN_ORIGIN || "",
 
-  process.env.BACKEND_URL || "https://www.onlu.vercel.app",
+  process.env.BACKEND_URL || "",
 ];
 
 // Add localhost for development
