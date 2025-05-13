@@ -5,19 +5,27 @@ description = "Backend API for fashion e-commerce website"
 
 [dependencies]
 python = "3.11"
+nodejs = "18.x"
 
 [fs]
-assets = "./public"
+# Make source code accessible
+src = "./"
+config = "./config"
+database = "./database"
+api = "./api"
+pages = "./pages"
 
-[command]
+[[command]]
 runner = "node"
 
 [command.args]
-args = [".next/standalone/server.js"]
+# Start the server directly
+args = ["server.js"]
 
 [build]
 command = """
 apt-get update && apt-get install -y python3-pip python3-dev build-essential libpq-dev && \
 npm install && \
-npm run build
+npm run build && \
+echo "Build completed successfully!"
 """

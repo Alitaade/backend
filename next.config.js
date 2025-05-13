@@ -5,21 +5,12 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // Static export configuration
-  output: 'export',
   
-  // Configure the output directory to be consistent with Docker expectations
-  distDir: 'out',
-  
-  // Enable trailing slash for paths
-  trailingSlash: true,
+  // Disable static export - we need API functionality
+  // output: 'export',
   
   typescript: {
     ignoreBuildErrors: true,
-  },
-  
-  images: {
-    unoptimized: true
   },
   
   // Webpack configuration to handle PostgreSQL and other issues
@@ -37,9 +28,6 @@ const nextConfig = {
       };
     }
     
-    // Ignore sharp if needed
-    config.externals = [...(config.externals || []), 'sharp'];
-    
     return config;
   },
 
@@ -49,17 +37,9 @@ const nextConfig = {
         // Apply CORS headers to all routes
         source: "/api/:path*",
         headers: [
-          { key: "Access-Control-Allow-Credentials", value: "true" },
           { key: "Access-Control-Allow-Origin", value: "*" },
-          {
-            key: "Access-Control-Allow-Methods",
-            value: "GET,DELETE,PATCH,POST,PUT,OPTIONS",
-          },
-          {
-            key: "Access-Control-Allow-Headers",
-            value:
-              "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, X-API-Key, x-api-key",
-          },
+          { key: "Access-Control-Allow-Methods", value: "GET, POST, PUT, DELETE, OPTIONS" },
+          { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization, X-API-Key" },
         ],
       },
     ];

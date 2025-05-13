@@ -9,13 +9,13 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && ln -s /usr/bin/python3 /usr/bin/python
 
-WORKDIR /__app
+WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies with native modules disabled
-RUN npm install --no-optional
+# Install dependencies
+RUN npm install
 
 # Copy the rest of the application
 COPY . .
@@ -23,19 +23,32 @@ COPY . .
 # Build the Next.js application
 RUN npm run build
 
-# The output directory is now in /__app/out
+# Production image
+FROM node:18-slim
 
-FROM node:18-slim AS runtime
+WORKDIR /app
 
-WORKDIR /__app
+# Install production dependencies only
+COPY --from=builder /app/package*.json ./
+RUN npm install --only=production
 
-# Copy only the production dependencies and built files
-COPY --from=builder /__app/package.json /__app/package.json
-COPY --from=builder /__app/node_modules /__app/node_modules
-COPY --from=builder /__app/out /__app/out
+# Copy built app
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/next.config.js ./
+COPY --from=builder /app/server.js ./
+COPY --from=builder /app/api ./api
+COPY --from=builder /app/pages ./pages
+COPY --from=builder /app/database ./database
+COPY --from=builder /app/models ./models
+COPY --from=builder /app/middleware ./middleware
+COPY --from=builder /app/controllers ./controllers
+COPY --from=builder /app/utils ./utils
 
-# Expose the port
+
+
+# Expose port
 EXPOSE 3000
 
-# Start the server with a simple static file server
-CMD ["npx", "serve", "-s", "out", "-l", "3000"]
+# Start the app
+CMD ["node", "server.js"]

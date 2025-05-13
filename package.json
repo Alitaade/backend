@@ -5,10 +5,10 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node dist/server.js",
     "lint": "next lint",
     "seed": "ts-node database/seed.ts",
-    "tsc": "echo 'Skipping tsc check for Wasmer'"
+    "tsc": "tsc --project tsconfig.json"
   },
   "keywords": [
     "ecommerce",
