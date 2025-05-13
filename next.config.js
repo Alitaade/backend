@@ -19,7 +19,7 @@ const nextConfig = {
    
     // responseLimit: '50mb', // Adjust as needed
   },
-  output: ".next", // Updated from experimental.outputStandalone
+  output: "standalone", // Updated from experimental.outputStandalone
   async headers() {
     return [
       {
