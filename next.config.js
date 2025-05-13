@@ -19,7 +19,7 @@ const nextConfig = {
    
     // responseLimit: '50mb', // Adjust as needed
   },
-  output: "standalone", // Updated from experimental.outputStandalone
+  distDir: 'build', // Change build output directory from .next to build// Updated from experimental.outputStandalone
   async headers() {
     return [
       {
