@@ -5,6 +5,7 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  output: 'standalone', // Important for Wasmer deployment
   distDir: '.next',
   
   // Enable trailing slash for paths
@@ -17,13 +18,6 @@ const nextConfig = {
   images: {
     disableStaticImages: true,
     unoptimized: true
-  },
-  
-  api: {
-    bodyParser: {
-      sizeLimit: '500mb', // For incoming requests
-    },
-    responseLimit: false, // For outgoing responses (disables the limit)
   },
   
   // Webpack configuration to handle PostgreSQL and other issues

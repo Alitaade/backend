@@ -1,0 +1,23 @@
+[package]
+name = "fashion-ecommerce-api"
+version = "0.1.0"
+description = "Backend API for fashion e-commerce website"
+
+[dependencies]
+python = "3.11"
+
+[fs]
+assets = "./public"
+
+[command]
+runner = "node"
+
+[command.args]
+args = [".next/standalone/server.js"]
+
+[build]
+command = """
+apt-get update && apt-get install -y python3-pip python3-dev build-essential libpq-dev && \
+npm install && \
+npm run build
+"""
