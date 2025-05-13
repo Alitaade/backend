@@ -5,27 +5,48 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  distDir: 'out',
-    // Enable static exports
-    trailingSlash: true,
+  distDir: '.next',
   
-    // For Netlify compatibility
-    target: 'serverless',
+  // Enable trailing slash for paths
+  trailingSlash: true,
+  
   typescript: {
     ignoreBuildErrors: true,
   },
+  
   images: {
-    unoptimized: true,
+    disableStaticImages: true,
+    unoptimized: true
   },
+  
   api: {
     bodyParser: {
       sizeLimit: '500mb', // For incoming requests
     },
     responseLimit: false, // For outgoing responses (disables the limit)
-   
-    // responseLimit: '50mb', // Adjust as needed
   },
-  output: "standalone", // Updated from experimental.outputStandalone
+  
+  // Webpack configuration to handle PostgreSQL and other issues
+  webpack: (config, { isServer }) => {
+    // Fixes npm packages that depend on `fs` module
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        pg: false,
+        'pg-native': false,
+        dns: false,
+      };
+    }
+    
+    // Ignore sharp if needed
+    config.externals = [...(config.externals || []), 'sharp'];
+    
+    return config;
+  },
+
   async headers() {
     return [
       {
@@ -45,8 +66,9 @@ const nextConfig = {
           },
         ],
       },
-    ]
+    ];
   },
+  
   async redirects() {
     return [
       {
@@ -54,8 +76,8 @@ const nextConfig = {
         destination: "/api",
         permanent: true,
       },
-    ]
+    ];
   },
-}
+};
 
-module.exports = nextConfig
+module.exports = nextConfig;
