@@ -15,11 +15,8 @@ database = "./database"
 api = "./api"
 pages = "./pages"
 
-[[command]]
+[command]
 runner = "node"
-
-[command.args]
-# Start the server directly
 args = ["server.js"]
 
 [build]
