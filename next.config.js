@@ -5,6 +5,12 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  distDir: 'out',
+    // Enable static exports
+    trailingSlash: true,
+  
+    // For Netlify compatibility
+    target: 'serverless',
   typescript: {
     ignoreBuildErrors: true,
   },
