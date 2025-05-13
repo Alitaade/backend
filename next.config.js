@@ -5,8 +5,9 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  output: 'standalone', // Important for Wasmer deployment
-  distDir: '.next',
+  // This is critical for Wasmer.io deployment
+  distDir: 'out',
+  output: 'export',   // Use 'export' to statically generate the output
   
   // Enable trailing slash for paths
   trailingSlash: true,
