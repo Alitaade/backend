@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -11,15 +10,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  api: {
-    bodyParser: {
-      sizeLimit: '500mb', // For incoming requests
-    },
-    responseLimit: false, // For outgoing responses (disables the limit)
-   
-    // responseLimit: '50mb', // Adjust as needed
-  },
-  output: "standalone", // Updated from experimental.outputStandalone
+  output: "standalone",
   async headers() {
     return [
       {
@@ -39,7 +30,7 @@ const nextConfig = {
           },
         ],
       },
-    ]
+    ];
   },
   async redirects() {
     return [
@@ -48,7 +39,7 @@ const nextConfig = {
         destination: "/api",
         permanent: true,
       },
-    ]
+    ];
   },
 }
 
