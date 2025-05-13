@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && ln -s /usr/bin/python3 /usr/bin/python
 
-WORKDIR /app
+WORKDIR /__app
 
 # Copy package files
 COPY package*.json ./
@@ -23,16 +23,16 @@ COPY . .
 # Build the Next.js application
 RUN npm run build
 
-# The export directory is now in /app/.next/export
+# The output directory is now in /__app/out
 
 FROM node:18-slim AS runtime
 
-WORKDIR /app
+WORKDIR /__app
 
 # Copy only the production dependencies and built files
-COPY --from=builder /app/package.json /app/package.json
-COPY --from=builder /app/node_modules /app/node_modules
-COPY --from=builder /app/out /app/out
+COPY --from=builder /__app/package.json /__app/package.json
+COPY --from=builder /__app/node_modules /__app/node_modules
+COPY --from=builder /__app/out /__app/out
 
 # Expose the port
 EXPOSE 3000

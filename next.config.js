@@ -8,6 +8,9 @@ const nextConfig = {
   // Static export configuration
   output: 'export',
   
+  // Configure the output directory to be consistent with Docker expectations
+  distDir: 'out',
+  
   // Enable trailing slash for paths
   trailingSlash: true,
   
