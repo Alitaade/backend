@@ -48,5 +48,8 @@
     "ts-node": "^10.9.2",
     "@types/next": "latest",
     "typescript": "latest"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }

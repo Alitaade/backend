@@ -10,6 +10,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  distDir: 'build', // Change build output directory from .next to build
   output: "standalone",
   async headers() {
     return [
