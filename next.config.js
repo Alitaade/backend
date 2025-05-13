@@ -5,9 +5,8 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // This is critical for Wasmer.io deployment
-  distDir: 'out',
-  output: 'export',   // Use 'export' to statically generate the output
+  // Static export configuration
+  output: 'export',
   
   // Enable trailing slash for paths
   trailingSlash: true,
@@ -17,7 +16,6 @@ const nextConfig = {
   },
   
   images: {
-    disableStaticImages: true,
     unoptimized: true
   },
   
