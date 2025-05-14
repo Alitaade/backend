@@ -244,10 +244,20 @@ export const optimizeBase64Image = async (
     return base64Data
   }
 }
-// Function to process images in chunks
+// controllers/product-controller.ts (processImagesInChunks function)
+
+/**
+ * Process an array of items in smaller chunks for better performance and memory management
+ * 
+ * @param items Array of items to process
+ * @param processFn Function to process each item
+ * @param chunkSize Number of items to process in parallel
+ * @param onProgress Optional callback for progress updates
+ * @returns Array of processed results
+ */
 export const processImagesInChunks = async <T>(
   items: T[],
-  processFn: (item: T) => Promise<any>,
+  processFn: (item: T, index: number) => Promise<any>,
   chunkSize = 3,
   onProgress?: (processed: number, total: number) => void
 ): Promise<any[]> => {
@@ -261,9 +271,10 @@ export const processImagesInChunks = async <T>(
     
     // Process current chunk in parallel
     const chunkResults = await Promise.all(
-      chunk.map(async (item) => {
+      chunk.map(async (item, chunkIndex) => {
         try {
-          return await processFn(item);
+          // Pass both item and global index to the processing function
+          return await processFn(item, i + chunkIndex);
         } catch (error) {
           console.error('Error processing item:', error);
           return null;

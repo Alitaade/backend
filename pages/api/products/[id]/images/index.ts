@@ -5,17 +5,18 @@ import { requireAdmin, enableCors } from "../../../../../middleware/auth-middlew
 
 export const config = {
   api: {
-    responseLimit: "10mb",
-    bodyParser: {
-      sizeLimit: "10mb",
-    },
+    // Increase limits for handling large images
+    responseLimit: "20mb",
+    // Disable bodyParser for file uploads - we'll use formidable
+    bodyParser: false,
   },
 }
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Handle preflight request explicitly with all needed headers
   if (req.method === "OPTIONS") {
     res.setHeader("Access-Control-Allow-Origin", "*")
-    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
+    res.setHeader("Access-Control-Allow-Methods", "POST, PUT, OPTIONS")
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key")
     res.setHeader("Access-Control-Allow-Credentials", "true")
     res.setHeader("Access-Control-Max-Age", "86400") // 24 hours
@@ -23,61 +24,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // For non-OPTIONS requests, use the enableCors middleware
-  return new Promise<void>((resolve, reject) => {
+  return new Promise((resolve) => {
     enableCors(req, res, async () => {
       try {
-        switch (req.method) {
-          case "POST": {
-            // Admin only - add multiple images to a product
-            requireAdmin(req, res, async () => {
-              try {
-                // Acknowledge receipt immediately
-                if (!res.headersSent) {
-                  res.writeHead(202, {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-api-key",
-                    "Access-Control-Allow-Credentials": "true",
-                  })
-                  res.write(
-                    JSON.stringify({
-                      status: "received",
-                      message: "Upload received. Processing images...",
-                    }),
-                  )
-                }
-
-                // Process the images
-                addMultipleImages(req, res)
-                  .then(() => {
-                    console.log("Images processed successfully")
-                  })
-                  .catch((error) => {
-                    console.error("Background processing error:", error)
-                  })
-
-                resolve()
-              } catch (error) {
-                console.error("Error in image upload handler:", error)
-                reject(error)
+        // Accept both POST and PUT for flexibility
+        if (req.method === "POST" || req.method === "PUT") {
+          // Admin only - add multiple images to a product
+          requireAdmin(req, res, async () => {
+            try {
+              // Process the images - this now handles the response internally
+              await addMultipleImages(req, res)
+              
+              // No need to resolve here as addMultipleImages handles the response
+              resolve(undefined)
+            } catch (error) {
+              console.error("Error in image upload handler:", error)
+              
+              // Only send error if headers haven't been sent
+              if (!res.writableEnded) {
+                res.status(500).json({
+                  error: "Failed to process images",
+                  message: error.message || "Unknown error",
+                })
               }
-            })
-            break
-          }
-
-          default:
-            res.status(405).json({ error: "Method not allowed" })
-            resolve()
+              resolve(undefined)
+            }
+          })
+        } else {
+          res.status(405).json({ error: "Method not allowed" })
+          resolve(undefined)
         }
       } catch (error) {
         console.error("Error handling request:", error)
-        if (!res.headersSent) {
+        if (!res.writableEnded) {
           res.status(500).json({
             error: "Internal server error",
             message: error.message || "Unknown error",
           })
         }
-        resolve()
+        resolve(undefined)
       }
     })
   })
