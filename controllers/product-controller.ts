@@ -788,7 +788,8 @@ export const addMultipleImages = async (req: NextApiRequest, res: NextApiRespons
       res.status(500).json({ error: `Internal server error: ${error.message}` });
     }
   }
-}// Export all functions for use in API routes
+}
+// Export all functions for use in API routes
 export {
   getAllProducts,
   getProductById,
