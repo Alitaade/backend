@@ -21,17 +21,20 @@ import {
 } from "../models/product"
 import { ensureImageDimensions, processImagesInBatches } from "../utils/image-utils"
 import { getAllCategories } from "../models/category"
-
+import formidable from "formidable";
+import fs from "fs";
+const formidableConfig = {
+  keepExtensions: true,
+  maxFileSize: 10 * 1024 * 1024, // 10MB limit per file
+  maxFields: 10,
+  multiples: true,
+};
 
 export const config = {
   api: {
-    // Increase limits for handling large images in JSON format
-    bodyParser: {
-      sizeLimit: '20mb' // Adjust based on your needs
-    },
-    responseLimit: "20mb",
+    bodyParser: false,
   },
-}
+};
 
 
 // Add new force delete endpoint handler
@@ -504,149 +507,240 @@ export const addSize = async (req: NextApiRequest, res: NextApiResponse) => {
  * Enhanced handler for processing multiple product images
  * Supports both multipart/form-data uploads and JSON payloads with base64/URLs
  */
-// Optimized addMultipleImages function - JSON only version
-export const addMultipleImages = async (req: NextApiRequest, res: NextApiResponse) => {
+
+
+// Helper to read request body as string (for JSON requests)
+const readBody = (req: NextApiRequest): Promise<string> => {
+  return new Promise((resolve) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk.toString();
+    });
+    req.on("end", () => {
+      resolve(body);
+    });
+  });
+};
+
+// Process FormData uploads (binary file uploads)
+export const handleFormDataUpload = async (req: NextApiRequest, res: NextApiResponse) => {
+  try {
+    const startTime = Date.now();
+    const { id } = req.query;
+    if (!id) return res.status(400).json({ error: "Product ID is required" });
+    const productId = Number.parseInt(id as string);
+
+    // Disable Next.js body parsing for form data
+    const form = formidable(formidableConfig);
+    
+    // Parse the form
+    const [fields, files] = await new Promise<[formidable.Fields, formidable.Files]>((resolve, reject) => {
+      form.parse(req, (err, fields, files) => {
+        if (err) reject(err);
+        else resolve([fields, files]);
+      });
+    });
+
+    // Handle isPrimary and altText from form fields
+    const isPrimary = fields.isPrimary?.[0] === "true";
+    const defaultAltText = fields.altText?.[0] || `Product ${productId}`;
+    
+    // Process files
+    const uploadedFiles = [];
+    const errors = [];
+    
+    // Convert files object to array if it exists
+    const fileArray = files.file ? (Array.isArray(files.file) ? files.file : [files.file]) : [];
+    
+    if (fileArray.length > 0) {
+      // Process files in batches for better performance
+      const results = await processImagesInBatches(
+        fileArray,
+        async (file, index) => {
+          try {
+            // Read file data
+            const fileData = await fs.promises.readFile(file.filepath);
+            
+            // Add the image to product
+            const image = await addProductImage(
+              productId, 
+              fileData.toString("base64"),
+              index === 0 && isPrimary,
+              undefined,
+              undefined,
+              defaultAltText || `Product ${productId} image ${index + 1}`
+            );
+            
+            // Clean up temp file
+            await fs.promises.unlink(file.filepath);
+            
+            return { image };
+          } catch (error) {
+            console.error(`File upload error for ${file.originalFilename}:`, error.message);
+            return { error: `Error with file ${file.originalFilename}: ${error.message}` };
+          }
+        },
+        3 // Process 3 files concurrently
+      );
+      
+      // Process results
+      results.forEach(result => {
+        if (result.image) uploadedFiles.push(result.image);
+        if (result.error) errors.push(result.error);
+      });
+    }
+    
+    // Log processing time
+    const processingTime = Date.now() - startTime;
+    console.log(`FormData files processed in ${processingTime}ms: ${uploadedFiles.length} successful, ${errors.length} failed`);
+    
+    return res.status(200).json({
+      message: "Files processed",
+      processingTimeMs: processingTime,
+      uploadedFile: uploadedFiles[0], // For single file endpoint
+      uploadedFiles: uploadedFiles,   // For multiple files endpoint
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (error) {
+    console.error("Server error in handleFormDataUpload:", error);
+    return res.status(500).json({ error: `Server error: ${error.message}` });
+  }
+};
+
+// Process JSON uploads (for base64 images and URLs)
+export const handleJsonUpload = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     const startTime = Date.now();
     const { id } = req.query;
     if (!id) return res.status(400).json({ error: "Product ID is required" });
     const productId = Number.parseInt(id as string);
     
-    // Handle JSON payload only with optimized approach
-    let body = "";
+    // Parse the JSON payload
+    const body = await readBody(req);
+    const jsonBody = JSON.parse(body);
+    const { base64Images, imageUrls, isPrimary, altText } = jsonBody;
     
-    // Use raw body data - faster than waiting for events
-    req.on("data", (chunk) => {
-      body += chunk.toString();
-    });
+    // Quick validation
+    if ((!base64Images || base64Images.length === 0) && (!imageUrls || imageUrls.length === 0)) {
+      return res.status(400).json({ error: "No images provided" });
+    }
 
-    return new Promise<void>((resolve) => {
-      req.on("end", async () => {
-        try {
-          // Parse the JSON payload
-          const jsonBody = JSON.parse(body);
-          const { base64Images, imageUrls, isPrimary, altText } = jsonBody;
-          
-          // Quick validation
-          if ((!base64Images || base64Images.length === 0) && (!imageUrls || imageUrls.length === 0)) {
-            res.status(400).json({ error: "No images provided" });
-            return resolve();
-          }
+    // Apply limits to prevent overloading
+    const MAX_BASE64 = 10;
+    const MAX_URLS = 15;
+    const limitedBase64 = Array.isArray(base64Images) ? base64Images.slice(0, MAX_BASE64) : [];
+    const limitedUrls = Array.isArray(imageUrls) ? imageUrls.slice(0, MAX_URLS) : [];
+    
+    const defaultAltText = altText || `Product ${productId}`;
+    
+    // Process in parallel with optimized chunk sizes for better performance
+    const [base64Results, urlResults] = await Promise.all([
+      limitedBase64.length > 0 
+        ? processImagesInBatches(
+            limitedBase64,
+            async (base64Data, index) => {
+              try {
+                const image = await addProductImage(
+                  productId,
+                  base64Data,
+                  index === 0 && isPrimary,
+                  undefined,
+                  undefined,
+                  defaultAltText
+                );
+                return { image };
+              } catch (error) {
+                console.error(`Base64 image ${index + 1} error:`, error.message);
+                return { error: `Error with base64 image ${index + 1}: ${error.message}` };
+              }
+            },
+            4 // Process 4 base64 images concurrently
+          )
+        : Promise.resolve([]),
+        
+      limitedUrls.length > 0
+        ? processImagesInBatches(
+            limitedUrls,
+            async (url, index) => {
+              try {
+                const image = await addProductImageByUrl(
+                  productId,
+                  url,
+                  (!limitedBase64 || limitedBase64.length === 0) && index === 0 && isPrimary,
+                  undefined,
+                  undefined,
+                  defaultAltText
+                );
+                return { image };
+              } catch (error) {
+                console.error(`URL ${index + 1} error:`, error.message);
+                return { error: `Error with URL ${index + 1}: ${error.message}` };
+              }
+            },
+            5 // Process 5 URLs concurrently
+          )
+        : Promise.resolve([])
+    ]);
 
-          // Apply limits to prevent overloading
-          const MAX_BASE64 = 10;
-          const MAX_URLS = 15;
-          const limitedBase64 = Array.isArray(base64Images) ? base64Images.slice(0, MAX_BASE64) : [];
-          const limitedUrls = Array.isArray(imageUrls) ? imageUrls.slice(0, MAX_URLS) : [];
-          
-          const defaultAltText = altText || `Product ${productId}`;
-          
-          // Process in parallel with optimized chunk sizes for better performance
-          const [base64Results, urlResults] = await Promise.all([
-            limitedBase64.length > 0 
-              ? processImagesInBatches(
-                  limitedBase64,
-                  async (base64Data, index) => {
-                    try {
-                      const image = await addProductImage(
-                        productId,
-                        base64Data,
-                        index === 0 && isPrimary,
-                        undefined,
-                        undefined,
-                        defaultAltText
-                      );
-                      return { image };
-                    } catch (error) {
-                      console.error(`Base64 image ${index + 1} error:`, error.message);
-                      return { error: `Error with base64 image ${index + 1}: ${error.message}` };
-                    }
-                  },
-                  4 // Increased batch size for better throughput
-                )
-              : Promise.resolve([]),
-              
-            limitedUrls.length > 0
-              ? processImagesInBatches(
-                  limitedUrls,
-                  async (url, index) => {
-                    try {
-                      const image = await addProductImageByUrl(
-                        productId,
-                        url,
-                        (!limitedBase64 || limitedBase64.length === 0) && index === 0 && isPrimary,
-                        undefined,
-                        undefined,
-                        defaultAltText
-                      );
-                      return { image };
-                    } catch (error) {
-                      console.error(`URL ${index + 1} error:`, error.message);
-                      return { error: `Error with URL ${index + 1}: ${error.message}` };
-                    }
-                  },
-                  5 // Increased batch size for URLs (they're typically faster to process)
-                )
-              : Promise.resolve([])
-          ]);
+    // Process results efficiently
+    const uploadedFiles = base64Results.filter(r => r.image).map(r => r.image);
+    const uploadedUrls = urlResults.filter(r => r.image).map(r => r.image);
+    const errors = [
+      ...base64Results.filter(r => r.error).map(r => r.error),
+      ...urlResults.filter(r => r.error).map(r => r.error)
+    ];
 
-          // Process results efficiently
-          const uploadedFiles = base64Results.filter(r => r.image).map(r => r.image);
-          const uploadedUrls = urlResults.filter(r => r.image).map(r => r.image);
-          const errors = [
-            ...base64Results.filter(r => r.error).map(r => r.error),
-            ...urlResults.filter(r => r.error).map(r => r.error)
-          ];
+    // Log processing time for performance monitoring
+    const processingTime = Date.now() - startTime;
+    console.log(`JSON images processed in ${processingTime}ms: ${uploadedFiles.length + uploadedUrls.length} successful, ${errors.length} failed`);
 
-          // Log processing time for performance monitoring
-          const processingTime = Date.now() - startTime;
-          console.log(`Images processed in ${processingTime}ms: ${uploadedFiles.length + uploadedUrls.length} successful, ${errors.length} failed`);
-
-          if (!res.writableEnded) {
-            res.status(200).json({
-              message: "Images processed",
-              processingTimeMs: processingTime,
-              uploadedFiles,
-              uploadedUrls,
-              errors: errors.length > 0 ? errors : undefined,
-            });
-          }
-          
-          return resolve();
-        } catch (error) {
-          console.error("JSON parsing error:", error);
-          if (!res.writableEnded) {
-            res.status(400).json({ error: `Invalid JSON: ${error.message}` });
-          }
-          return resolve();
-        }
-      });
+    return res.status(200).json({
+      message: "Images processed",
+      processingTimeMs: processingTime,
+      uploadedFiles,
+      uploadedUrls,
+      errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {
-    console.error("Server error in addMultipleImages:", error);
-    if (!res.writableEnded) {
-      res.status(500).json({ error: `Server error: ${error.message}` });
+    if (error.name === "SyntaxError") {
+      console.error("JSON parsing error:", error);
+      return res.status(400).json({ error: `Invalid JSON: ${error.message}` });
     }
+    
+    console.error("Server error in handleJsonUpload:", error);
+    return res.status(500).json({ error: `Server error: ${error.message}` });
   }
 };
 
-
-
-// Frontend-compatible interface: Modified function to work with both JSON and FormData
+// Main handler function to dispatch to appropriate processor based on content type
 export const processUpload = async (req: NextApiRequest, res: NextApiResponse) => {
-  const contentType = req.headers["content-type"] || "";
-  
-  // Only handle JSON requests
-  if (contentType.includes('application/json')) {
-    return addMultipleImages(req, res);
-  } else {
-    // For other content types, return an appropriate error
-    res.status(415).json({ 
-      error: "Unsupported Media Type", 
-      message: "Only JSON payloads are supported. Please use the JSON API endpoint." 
-    });
+  try {
+    const contentType = req.headers["content-type"] || "";
+    
+    if (contentType.includes('application/json')) {
+      // Handle JSON payload (for URLs and base64)
+      return handleJsonUpload(req, res);
+    } else if (contentType.includes('multipart/form-data')) {
+      // Handle FormData (for file uploads)
+      return handleFormDataUpload(req, res);
+    } else {
+      // For other content types, return an appropriate error
+      return res.status(415).json({ 
+        error: "Unsupported Media Type", 
+        message: "Only JSON or multipart/form-data payloads are supported." 
+      });
+    }
+  } catch (error) {
+    console.error("Error in processUpload:", error);
+    return res.status(500).json({ error: `Server error: ${error.message}` });
   }
 }
+
+// Handler for single image upload (used by FormData in frontend)
+export const handleSingleImageUpload = async (req: NextApiRequest, res: NextApiResponse) => {
+  // Delegate to the FormData handler since it already handles single file case
+  return handleFormDataUpload(req, res);
+};
 // Export all functions for use in API routes
 export {
   getAllProducts,
