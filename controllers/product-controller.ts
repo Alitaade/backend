@@ -500,11 +500,6 @@ export const addSize = async (req: NextApiRequest, res: NextApiResponse) => {
     return res.status(500).json({ error: "Internal server error" })
   }
 }
-// controllers/product-controller.ts (addMultipleImages function)
-import formidable from "formidable";
-import fs from "fs";
-import { NextApiRequest, NextApiResponse } from "next";
-import { addProductImage, addProductImageByUrl } from "../services/product-service";
 
 /**
  * Enhanced handler for processing multiple product images
