@@ -19,18 +19,17 @@ import {
   calculateTotalStock,
   updateProductTotalStock,
 } from "../models/product"
-import { ensureImageDimensions, optimizeBase64Image, processImagesInChunks } from "../utils/image-utils"
+import { ensureImageDimensions, processImagesInBatches } from "../utils/image-utils"
 import { getAllCategories } from "../models/category"
-import formidable from "formidable"
-import path from "path"
-import fs from "fs"
-import { v4 as uuidv4 } from "uuid"
 
-// Config for file upload endpoints to disable body parsing
+
 export const config = {
   api: {
-    responseLimit: '10mb',
-    bodyParser: false,
+    // Increase limits for handling large images in JSON format
+    bodyParser: {
+      sizeLimit: '20mb' // Adjust based on your needs
+    },
+    responseLimit: "20mb",
   },
 }
 
@@ -505,283 +504,147 @@ export const addSize = async (req: NextApiRequest, res: NextApiResponse) => {
  * Enhanced handler for processing multiple product images
  * Supports both multipart/form-data uploads and JSON payloads with base64/URLs
  */
+// Optimized addMultipleImages function - JSON only version
 export const addMultipleImages = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
+    const startTime = Date.now();
     const { id } = req.query;
-
-    if (!id) {
-      return res.status(400).json({ error: "Product ID is required" });
-    }
-
+    if (!id) return res.status(400).json({ error: "Product ID is required" });
     const productId = Number.parseInt(id as string);
     
-    // Check if the request is multipart/form-data
-    const contentType = req.headers["content-type"] || "";
-    const isMultipart = contentType.startsWith("multipart/form-data");
+    // Handle JSON payload only with optimized approach
+    let body = "";
+    
+    // Use raw body data - faster than waiting for events
+    req.on("data", (chunk) => {
+      body += chunk.toString();
+    });
 
-    if (isMultipart) {
-      // Handle file uploads using formidable with optimized settings
-      const form = formidable({
-        maxFileSize: 50 * 1024 * 1024, // 50MB limit
-        multiples: true,
-        keepExtensions: true,
-        maxFiles: 30, // Support up to 30 files
-        uploadDir: "/tmp", // Use system temp dir for better performance
-      });
-
-      return new Promise<void>((resolve) => {
-        form.parse(req, async (err, fields, files) => {
-          if (err) {
-            console.error("Error parsing form:", err);
-            res.status(400).json({ error: `Error parsing form data: ${err.message}` });
+    return new Promise<void>((resolve) => {
+      req.on("end", async () => {
+        try {
+          // Parse the JSON payload
+          const jsonBody = JSON.parse(body);
+          const { base64Images, imageUrls, isPrimary, altText } = jsonBody;
+          
+          // Quick validation
+          if ((!base64Images || base64Images.length === 0) && (!imageUrls || imageUrls.length === 0)) {
+            res.status(400).json({ error: "No images provided" });
             return resolve();
           }
 
-          try {
-            // Process images field - could be single file or array
-            const imageFiles = files.images || files.files || [];
-            const fileArray = Array.isArray(imageFiles) ? imageFiles : [imageFiles];
-
-            if (fileArray.length === 0) {
-              res.status(400).json({ error: "No image files provided" });
-              return resolve();
-            }
-
-            console.log(`Processing ${fileArray.length} image files for product ${productId}`);
-
-            // Parse additional form fields
-            const isPrimary = fields.isPrimary === "true" || 
-              (Array.isArray(fields.isPrimary) && fields.isPrimary[0] === "true");
-              
-            const altText = (Array.isArray(fields.altText) ? fields.altText[0] : fields.altText as string) || 
-              `Image of product ${productId}`;
-
-            // Process image URLs if provided
-            const imageUrlsField = fields.imageUrls;
-            let imageUrls: string[] = [];
-
-            if (imageUrlsField) {
-              if (Array.isArray(imageUrlsField)) {
-                imageUrls = imageUrlsField;
-              } else if (typeof imageUrlsField === 'string') {
-                try {
-                  // Try parsing as JSON
-                  imageUrls = JSON.parse(imageUrlsField);
-                } catch {
-                  // If not JSON, treat as a single URL
-                  imageUrls = [imageUrlsField];
-                }
-              }
-            }
-
-            const uploadedFiles = [];
-            const errors = [];
-
-            // Process files in chunks of 3 at a time
-            await processImagesInChunks(
-              fileArray,
-              async (file, index) => {
-                try {
-                  // Verify file is an image
-                  const mimeType = file.mimetype || "";
-                  if (!mimeType.startsWith("image/")) {
-                    throw new Error(`File ${index + 1} is not an image`);
-                  }
-
-                  // Read file as buffer
-                  const fileBuffer = fs.readFileSync(file.filepath);
-                  const base64Data = `data:${mimeType};base64,${fileBuffer.toString("base64")}`;
-
-                  // Add to database directly with base64Data
-                  const image = await addProductImage(
-                    productId,
-                    base64Data,
-                    index === 0 && isPrimary, // Only first image is primary if isPrimary is true
-                    undefined, // width - will be determined later if needed
-                    undefined, // height - will be determined later if needed
-                    altText
-                  );
-
-                  return image;
-                } catch (error) {
-                  console.error(`Error processing file ${index + 1}:`, error);
-                  errors.push(`Failed to process file ${index + 1}: ${error.message}`);
-                  return null;
-                } finally {
-                  // Clean up temp file
-                  try {
-                    if (fs.existsSync(file.filepath)) {
-                      fs.unlinkSync(file.filepath);
+          // Apply limits to prevent overloading
+          const MAX_BASE64 = 10;
+          const MAX_URLS = 15;
+          const limitedBase64 = Array.isArray(base64Images) ? base64Images.slice(0, MAX_BASE64) : [];
+          const limitedUrls = Array.isArray(imageUrls) ? imageUrls.slice(0, MAX_URLS) : [];
+          
+          const defaultAltText = altText || `Product ${productId}`;
+          
+          // Process in parallel with optimized chunk sizes for better performance
+          const [base64Results, urlResults] = await Promise.all([
+            limitedBase64.length > 0 
+              ? processImagesInBatches(
+                  limitedBase64,
+                  async (base64Data, index) => {
+                    try {
+                      const image = await addProductImage(
+                        productId,
+                        base64Data,
+                        index === 0 && isPrimary,
+                        undefined,
+                        undefined,
+                        defaultAltText
+                      );
+                      return { image };
+                    } catch (error) {
+                      console.error(`Base64 image ${index + 1} error:`, error.message);
+                      return { error: `Error with base64 image ${index + 1}: ${error.message}` };
                     }
-                  } catch (err) {
-                    console.warn(`Could not delete temp file:`, err);
-                  }
-                }
-              },
-              3, // Process 3 files at a time
-              (processed, total) => {
-                console.log(`Processed ${processed}/${total} images`);
-              }
-            ).then(results => {
-              uploadedFiles.push(...results.filter(r => r !== null));
-            });
+                  },
+                  4 // Increased batch size for better throughput
+                )
+              : Promise.resolve([]),
+              
+            limitedUrls.length > 0
+              ? processImagesInBatches(
+                  limitedUrls,
+                  async (url, index) => {
+                    try {
+                      const image = await addProductImageByUrl(
+                        productId,
+                        url,
+                        (!limitedBase64 || limitedBase64.length === 0) && index === 0 && isPrimary,
+                        undefined,
+                        undefined,
+                        defaultAltText
+                      );
+                      return { image };
+                    } catch (error) {
+                      console.error(`URL ${index + 1} error:`, error.message);
+                      return { error: `Error with URL ${index + 1}: ${error.message}` };
+                    }
+                  },
+                  5 // Increased batch size for URLs (they're typically faster to process)
+                )
+              : Promise.resolve([])
+          ]);
 
-            // Process URLs in chunks too
-            const uploadedUrls = [];
-            if (imageUrls && imageUrls.length > 0) {
-              await processImagesInChunks(
-                imageUrls,
-                async (url, index) => {
-                  try {
-                    return await addProductImageByUrl(
-                      productId,
-                      url,
-                      uploadedFiles.length === 0 && index === 0 && isPrimary,
-                      undefined,
-                      undefined,
-                      altText
-                    );
-                  } catch (error) {
-                    console.error(`Error processing URL ${index + 1}:`, error);
-                    errors.push(`Failed to process URL ${index + 1}: ${error.message}`);
-                    return null;
-                  }
-                },
-                5 // Process 5 URLs at a time
-              ).then(results => {
-                uploadedUrls.push(...results.filter(r => r !== null));
-              });
-            }
+          // Process results efficiently
+          const uploadedFiles = base64Results.filter(r => r.image).map(r => r.image);
+          const uploadedUrls = urlResults.filter(r => r.image).map(r => r.image);
+          const errors = [
+            ...base64Results.filter(r => r.error).map(r => r.error),
+            ...urlResults.filter(r => r.error).map(r => r.error)
+          ];
 
-            // Return successful response
+          // Log processing time for performance monitoring
+          const processingTime = Date.now() - startTime;
+          console.log(`Images processed in ${processingTime}ms: ${uploadedFiles.length + uploadedUrls.length} successful, ${errors.length} failed`);
+
+          if (!res.writableEnded) {
             res.status(200).json({
-              message: "Image processing complete",
+              message: "Images processed",
+              processingTimeMs: processingTime,
               uploadedFiles,
               uploadedUrls,
               errors: errors.length > 0 ? errors : undefined,
             });
-            
-            return resolve();
-          } catch (error) {
-            console.error("Error processing uploaded images:", error);
-            if (!res.writableEnded) {
-              res.status(500).json({ error: `Failed to process uploaded images: ${error.message}` });
-            }
-            return resolve();
           }
-        });
-      });
-    } else {
-      // Handle JSON payload with base64 images or URLs
-      // Parse the request body manually since bodyParser is disabled
-      let body = "";
-
-      req.on("data", (chunk) => {
-        body += chunk.toString();
-      });
-
-      return new Promise<void>((resolve) => {
-        req.on("end", async () => {
-          try {
-            // Parse the JSON body
-            const jsonBody = JSON.parse(body);
-            const { base64Images, imageUrls, isPrimary, altText } = jsonBody;
-
-            // Validate input
-            if (
-              (!base64Images || !Array.isArray(base64Images) || base64Images.length === 0) &&
-              (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0)
-            ) {
-              res.status(400).json({ error: "At least one image (URL or base64) is required" });
-              return resolve();
-            }
-
-            const uploadedFiles = [];
-            const uploadedUrls = [];
-            const errors = [];
-
-            // Process base64 images in chunks
-            if (base64Images && Array.isArray(base64Images) && base64Images.length > 0) {
-              console.log(`Processing ${base64Images.length} base64 images for product ${productId}`);
-
-              await processImagesInChunks(
-                base64Images,
-                async (base64Data, index) => {
-                  try {
-                    // Skip optimization to improve performance
-                    return await addProductImage(
-                      productId,
-                      base64Data,
-                      index === 0 && isPrimary,
-                      undefined,
-                      undefined,
-                      altText || `Image of product ${productId}`
-                    );
-                  } catch (error) {
-                    console.error(`Error processing base64 image ${index + 1}:`, error);
-                    errors.push(`Failed to process base64 image ${index + 1}: ${error.message}`);
-                    return null;
-                  }
-                },
-                4 // Process 4 base64 images at a time
-              ).then(results => {
-                uploadedFiles.push(...results.filter(r => r !== null));
-              });
-            }
-
-            // Process image URLs in chunks
-            if (imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0) {
-              console.log(`Processing ${imageUrls.length} image URLs for product ${productId}`);
-
-              await processImagesInChunks(
-                imageUrls,
-                async (url, index) => {
-                  try {
-                    return await addProductImageByUrl(
-                      productId,
-                      url,
-                      uploadedFiles.length === 0 && index === 0 && isPrimary,
-                      undefined,
-                      undefined,
-                      altText || `Image of product ${productId}`
-                    );
-                  } catch (error) {
-                    console.error(`Error processing URL ${index + 1}:`, error);
-                    errors.push(`Failed to process URL ${index + 1}: ${error.message}`);
-                    return null;
-                  }
-                },
-                5 // Process 5 URLs at a time
-              ).then(results => {
-                uploadedUrls.push(...results.filter(r => r !== null));
-              });
-            }
-
-            if (!res.writableEnded) {
-              res.status(200).json({
-                message: "Image processing complete",
-                uploadedFiles,
-                uploadedUrls,
-                errors: errors.length > 0 ? errors : undefined,
-              });
-            }
-            
-            return resolve();
-          } catch (error) {
-            console.error("Error parsing JSON body:", error);
-            if (!res.writableEnded) {
-              res.status(400).json({ error: `Invalid JSON body: ${error.message}` });
-            }
-            return resolve();
+          
+          return resolve();
+        } catch (error) {
+          console.error("JSON parsing error:", error);
+          if (!res.writableEnded) {
+            res.status(400).json({ error: `Invalid JSON: ${error.message}` });
           }
-        });
+          return resolve();
+        }
       });
-    }
+    });
   } catch (error) {
-    console.error("Error in addMultipleImages:", error);
+    console.error("Server error in addMultipleImages:", error);
     if (!res.writableEnded) {
-      res.status(500).json({ error: `Internal server error: ${error.message}` });
+      res.status(500).json({ error: `Server error: ${error.message}` });
     }
+  }
+};
+
+
+
+// Frontend-compatible interface: Modified function to work with both JSON and FormData
+export const processUpload = async (req: NextApiRequest, res: NextApiResponse) => {
+  const contentType = req.headers["content-type"] || "";
+  
+  // Only handle JSON requests
+  if (contentType.includes('application/json')) {
+    return addMultipleImages(req, res);
+  } else {
+    // For other content types, return an appropriate error
+    res.status(415).json({ 
+      error: "Unsupported Media Type", 
+      message: "Only JSON payloads are supported. Please use the JSON API endpoint." 
+    });
   }
 }
 // Export all functions for use in API routes

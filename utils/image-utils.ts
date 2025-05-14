@@ -293,3 +293,54 @@ export const processImagesInChunks = async <T>(
   
   return results;
 }
+// Optimized processing function with better batching strategy
+export const processImagesInBatches = async <T, R>(
+  items: T[],
+  processFn: (item: T, index: number) => Promise<R>,
+  batchSize = 4, // Increased default batch size for better throughput
+  onProgress?: (processed: number, total: number) => void
+): Promise<R[]> => {
+  const results: R[] = [];
+  const total = items.length;
+  let processed = 0;
+  
+  // Fast path for single item
+  if (total === 1) {
+    try {
+      const result = await processFn(items[0], 0);
+      if (onProgress) onProgress(1, 1);
+      return [result];
+    } catch (error) {
+      console.error('Error processing single item:', error);
+      return [];
+    }
+  }
+  
+  // Process in optimized batches
+  for (let i = 0; i < total; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    
+    // Process current batch in parallel
+    const batchPromises = batch.map(async (item, batchIndex) => {
+      try {
+        return await processFn(item, i + batchIndex);
+      } catch (error) {
+        console.error('Error processing item:', error);
+        return null;
+      } finally {
+        processed++;
+        if (onProgress) {
+          onProgress(processed, total);
+        }
+      }
+    });
+    
+    // Wait for all promises in this batch and collect results
+    const batchResults = await Promise.all(batchPromises);
+    
+    // Add valid results from this batch
+    results.push(...batchResults.filter(r => r !== null));
+  }
+  
+  return results;
+}

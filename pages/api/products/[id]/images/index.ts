@@ -1,14 +1,16 @@
+// Updated API endpoint handler for JSON-only uploads
 // pages/api/products/[id]/images/index.ts
 import type { NextApiRequest, NextApiResponse } from "next"
-import { addMultipleImages } from "../../../../../controllers/product-controller"
+import { processUpload } from "../../../../../controllers/product-controller"
 import { requireAdmin, enableCors } from "../../../../../middleware/auth-middleware"
 
 export const config = {
   api: {
-    // Increase limits for handling large images
+    // Increase limits for handling large images in JSON format
+    bodyParser: {
+      sizeLimit: '20mb' // Adjust based on your needs
+    },
     responseLimit: "20mb",
-    // Disable bodyParser for file uploads - we'll use formidable
-    bodyParser: false,
   },
 }
 
@@ -32,38 +34,49 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           // Admin only - add multiple images to a product
           requireAdmin(req, res, async () => {
             try {
-              // Process the images - this now handles the response internally
-              await addMultipleImages(req, res)
+              // Check content type
+              const contentType = req.headers["content-type"] || "";
               
-              // No need to resolve here as addMultipleImages handles the response
-              resolve(undefined)
+              if (!contentType.includes('application/json')) {
+                res.status(415).json({ 
+                  error: "Unsupported Media Type", 
+                  message: "Only JSON payloads are supported" 
+                });
+                return resolve(undefined);
+              }
+              
+              // Process the upload - JSON only
+              await processUpload(req, res);
+              
+              // Resolve the promise
+              resolve(undefined);
             } catch (error) {
-              console.error("Error in image upload handler:", error)
+              console.error("Error in image upload handler:", error);
               
               // Only send error if headers haven't been sent
               if (!res.writableEnded) {
                 res.status(500).json({
                   error: "Failed to process images",
                   message: error.message || "Unknown error",
-                })
+                });
               }
-              resolve(undefined)
+              resolve(undefined);
             }
-          })
+          });
         } else {
-          res.status(405).json({ error: "Method not allowed" })
-          resolve(undefined)
+          res.status(405).json({ error: "Method not allowed" });
+          resolve(undefined);
         }
       } catch (error) {
-        console.error("Error handling request:", error)
+        console.error("Error handling request:", error);
         if (!res.writableEnded) {
           res.status(500).json({
             error: "Internal server error",
             message: error.message || "Unknown error",
-          })
+          });
         }
-        resolve(undefined)
+        resolve(undefined);
       }
-    })
-  })
+    });
+  });
 }
