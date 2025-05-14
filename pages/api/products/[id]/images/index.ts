@@ -10,8 +10,7 @@ export const config = {
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Handle preflight OPTIONS request
-  console.log(`Received ${req.method} request to ${req.url}`);
+
   if (req.method === "OPTIONS") {
     res.setHeader("Access-Control-Allow-Origin", "*") // Replace with specific origin in production
     res.setHeader("Access-Control-Allow-Methods", "POST, PUT, OPTIONS")
@@ -21,7 +20,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Log content type for debugging
   console.log("Content-Type header:", req.headers["content-type"]);
-
+  // Handle preflight OPTIONS request
+  console.log(`Received ${req.method} request to ${req.url}`);
   switch (req.method) {
     case "POST":
     case "PUT":
