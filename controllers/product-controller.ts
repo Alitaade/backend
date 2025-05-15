@@ -530,14 +530,27 @@ export const handleFormDataUpload = async (req: NextApiRequest, res: NextApiResp
     if (!id) return res.status(400).json({ error: "Product ID is required" });
     const productId = Number.parseInt(id as string);
 
+    console.log("Processing FormData upload for product ID:", productId);
+    console.log("Content-Type:", req.headers["content-type"]);
+
     // Disable Next.js body parsing for form data
-    const form = formidable(formidableConfig);
+    const form = formidable({
+      ...formidableConfig,
+      multiples: true, // Ensure multiple files are supported
+    });
     
     // Parse the form
     const [fields, files] = await new Promise<[formidable.Fields, formidable.Files]>((resolve, reject) => {
       form.parse(req, (err, fields, files) => {
-        if (err) reject(err);
-        else resolve([fields, files]);
+        if (err) {
+          console.error("Error parsing form:", err);
+          reject(err);
+        } else {
+          console.log("Form parsed successfully");
+          console.log("Fields:", fields);
+          console.log("Files:", files);
+          resolve([fields, files]);
+        }
       });
     });
 
@@ -545,12 +558,26 @@ export const handleFormDataUpload = async (req: NextApiRequest, res: NextApiResp
     const isPrimary = fields.isPrimary?.[0] === "true";
     const defaultAltText = fields.altText?.[0] || `Product ${productId}`;
     
+    console.log("isPrimary:", isPrimary);
+    console.log("defaultAltText:", defaultAltText);
+    
     // Process files
     const uploadedFiles = [];
     const errors = [];
     
     // Convert files object to array if it exists
-    const fileArray = files.file ? (Array.isArray(files.file) ? files.file : [files.file]) : [];
+    // IMPORTANT: Check for both 'file' and 'image' keys
+    const fileArray = [];
+    if (files.file) {
+      const fileEntries = Array.isArray(files.file) ? files.file : [files.file];
+      fileArray.push(...fileEntries);
+    }
+    if (files.image) {
+      const imageEntries = Array.isArray(files.image) ? files.image : [files.image];
+      fileArray.push(...imageEntries);
+    }
+    
+    console.log(`Found ${fileArray.length} files to process`);
     
     if (fileArray.length > 0) {
       // Process files in batches for better performance
@@ -558,18 +585,25 @@ export const handleFormDataUpload = async (req: NextApiRequest, res: NextApiResp
         fileArray,
         async (file, index) => {
           try {
+            console.log(`Processing file: ${file.originalFilename}, size: ${file.size} bytes`);
             // Read file data
             const fileData = await fs.promises.readFile(file.filepath);
+            console.log(`Read ${fileData.length} bytes from file`);
+            
+            // Convert to base64 for storage
+            const base64Data = `data:${file.mimetype || 'image/jpeg'};base64,${fileData.toString("base64")}`;
             
             // Add the image to product
             const image = await addProductImage(
               productId, 
-              fileData.toString("base64"),
+              base64Data,
               index === 0 && isPrimary,
               undefined,
               undefined,
               defaultAltText || `Product ${productId} image ${index + 1}`
             );
+            
+            console.log(`Successfully added image ID: ${image.id}`);
             
             // Clean up temp file
             await fs.promises.unlink(file.filepath);
