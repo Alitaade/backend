@@ -1,17 +1,28 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { getSalesReport } from "@/controllers/admin-contoller"
-import { requireAdmin } from "../../../middleware/auth-middleware"
-import { applyMiddleware } from "../../../middleware/api-security"
+import { requireAdmin, enableCors } from "../../../middleware/auth-middleware"
 
-async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Only allow GET requests
-  if (req.method !== "GET") {
-    return res.status(405).json({ error: "Method not allowed" })
-  }
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  return new Promise<void>((resolve) => {
+    // Apply middleware chain
+    enableCors(req, res, () => {
+      requireAdmin(req, res, async () => {
+        try {
+          // Only allow GET requests
+          if (req.method !== "GET") {
+            res.status(405).json({ error: "Method not allowed" })
+            return resolve()
+          }
 
-  // Pass control to the controller
-  return getSalesReport(req, res)
+          // Pass control to the controller
+          await getSalesReport(req, res)
+          resolve()
+        } catch (error) {
+          console.error("Error fetching sales report:", error)
+          res.status(500).json({ error: "Failed to fetch sales report" })
+          resolve()
+        }
+      })
+    })
+  })
 }
-
-// Apply admin authentication and CORS middleware
-export default applyMiddleware(requireAdmin(handler as any))

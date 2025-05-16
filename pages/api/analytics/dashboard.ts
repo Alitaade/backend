@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { getDashboardStats } from "@/controllers/admin-contoller"
-import { requireAdmin } from "../../../middleware/auth-middleware"
+import { requireAdmin, enableCors } from "../../../middleware/auth-middleware"
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   // Only allow GET requests
@@ -9,7 +9,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   // Apply admin authentication middleware
+  enableCors(req, res, () => {
   requireAdmin(req as any, res, () => {
     getDashboardStats(req, res)
   })
+})
 }
