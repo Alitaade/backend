@@ -4,8 +4,8 @@
   "description": "Backend API for fashion e-commerce website",
   "scripts": {
     "dev": "next dev",
-    "build": "unset NPM_CONFIG_LOGSTREAM && next build",
-    "start": "unset NPM_CONFIG_LOGSTREAM && next start",
+    "build": "npm run seed && next build",
+    "start": "next start",
     "lint": "next lint",
     "seed": "ts-node database/seed.ts",
     "tsc": "echo 'Skipping tsc check for Netlify'"
