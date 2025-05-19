@@ -14,40 +14,42 @@ export const DEFAULT_IMAGE_DIMENSIONS = {
 // Function to validate image URL - modified to accept any URL and local files
 export const validateImageUrl = (url: string): boolean => {
   // Accept local file uploads (which will be represented as relative paths)
-  if (url.startsWith('/') || url.startsWith('./')) {
-    return true;
+  if (url.startsWith("/") || url.startsWith("./")) {
+    return true
   }
 
   try {
-    const parsedUrl = new URL(url);
-    const protocol = parsedUrl.protocol.toLowerCase();
+    const parsedUrl = new URL(url)
+    const protocol = parsedUrl.protocol.toLowerCase()
 
     // Only allow http and https protocols
     if (protocol !== "http:" && protocol !== "https:") {
-      return false;
+      return false
     }
 
     // Check if the URL has a valid image extension
-    const validExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".avif", ".bmp", ".tiff"];
-    const path = parsedUrl.pathname.toLowerCase();
-    
+    const validExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".avif", ".bmp", ".tiff"]
+    const path = parsedUrl.pathname.toLowerCase()
+
     // Accept any domain but still verify image extensions
-    return validExtensions.some(ext => path.endsWith(ext)) || 
-           // Also allow URLs with "image" in the path or containing "image" in query params
-           path.includes('image') || 
-           parsedUrl.search.toLowerCase().includes('image');
+    return (
+      validExtensions.some((ext) => path.endsWith(ext)) ||
+      // Also allow URLs with "image" in the path or containing "image" in query params
+      path.includes("image") ||
+      parsedUrl.search.toLowerCase().includes("image")
+    )
   } catch (error) {
     // If URL parsing fails but the string looks like a base64 data URL for an image
-    if (url.startsWith('data:image/')) {
-      return true;
+    if (url.startsWith("data:image/")) {
+      return true
     }
-    return false;
+    return false
   }
 }
 
 // Function to generate image dimensions if not provided
 export const generateImageDimensions = (
-  imageType: "thumbnail" | "product" | "banner" | "carousel",
+  imageType: keyof typeof DEFAULT_IMAGE_DIMENSIONS,
 ): { width: number; height: number } => {
   return DEFAULT_IMAGE_DIMENSIONS[imageType]
 }
@@ -60,19 +62,27 @@ export const generateAltText = (productName: string, imageIndex: number): string
   return `${position} of ${productName}`
 }
 
-// Function to optimize image URL for different sizes
+// Update the getOptimizedImageUrl function to handle S3 URLs properly
 export const getOptimizedImageUrl = (
   originalUrl: string,
   size: "thumbnail" | "small" | "medium" | "large" | "original" = "medium",
 ): string => {
   // Handle local files - don't try to optimize them
-  if (originalUrl.startsWith('/') || originalUrl.startsWith('./') || originalUrl.startsWith('data:')) {
-    return originalUrl;
+  if (originalUrl.startsWith("/") || originalUrl.startsWith("./") || originalUrl.startsWith("data:")) {
+    return originalUrl
   }
 
   try {
-    const parsedUrl = new URL(originalUrl);
-    
+    // Check if this is an S3 URL (contains leapcellobj.com or objstorage.leapcell.io)
+    if (originalUrl.includes("leapcellobj.com") || originalUrl.includes("objstorage.leapcell.io")) {
+      // If it's a signed URL with query parameters, strip them off
+      if (originalUrl.includes("?")) {
+        return originalUrl.split("?")[0]
+      }
+      // Otherwise use as-is
+      return originalUrl
+    }
+
     // Handle Unsplash images
     if (originalUrl.includes("unsplash.com")) {
       // Extract any existing query parameters
@@ -108,12 +118,13 @@ export const getOptimizedImageUrl = (
 
       return `${baseUrl}?${params.toString()}`
     }
-    
+
     // For other image sources, just return the original URL
-    return originalUrl;
+    return originalUrl
   } catch (error) {
     // If URL parsing fails, return the original
-    return originalUrl;
+    console.error("Error optimizing URL:", error)
+    return originalUrl
   }
 }
 
@@ -200,6 +211,11 @@ export const optimizeBase64Image = async (
     // Convert base64 to buffer
     const buffer = Buffer.from(base64, "base64")
 
+    // For small images (less than 100KB), skip optimization
+    if (buffer.length < 100 * 1024) {
+      return base64Data
+    }
+
     // Determine output format
     let format = options.format || "jpeg"
     if (mimeType.includes("png") && !options.format) {
@@ -208,8 +224,8 @@ export const optimizeBase64Image = async (
       format = "webp"
     }
 
-    // Create Sharp instance
-    let sharpInstance = sharp(buffer)
+    // Create Sharp instance with faster settings
+    let sharpInstance = sharp(buffer, { failOn: "none" })
 
     // Resize if dimensions provided
     if (options.width || options.height) {
@@ -222,16 +238,32 @@ export const optimizeBase64Image = async (
     }
 
     // Set quality (higher for better quality)
-    const quality = options.quality || 100
+    const quality = options.quality || 80
 
-    // Process image based on format
+    // Process image based on format with faster settings
     let outputBuffer
     if (format === "jpeg") {
-      outputBuffer = await sharpInstance.jpeg({ quality }).toBuffer()
+      outputBuffer = await sharpInstance
+        .jpeg({
+          quality,
+          mozjpeg: false, // Disable mozjpeg for speed
+          trellisQuantisation: false,
+        })
+        .toBuffer()
     } else if (format === "png") {
-      outputBuffer = await sharpInstance.png({ quality }).toBuffer()
+      outputBuffer = await sharpInstance
+        .png({
+          quality,
+          compressionLevel: 6, // Balanced compression
+        })
+        .toBuffer()
     } else if (format === "webp") {
-      outputBuffer = await sharpInstance.webp({ quality }).toBuffer()
+      outputBuffer = await sharpInstance
+        .webp({
+          quality,
+          effort: 3, // Lower effort for faster processing
+        })
+        .toBuffer()
     }
 
     // Convert back to base64
@@ -244,74 +276,88 @@ export const optimizeBase64Image = async (
     return base64Data
   }
 }
-// controllers/product-controller.ts (processImagesInChunks function)
 
-/**
- * Process an array of items in smaller chunks for better performance and memory management
- * 
- * @param items Array of items to process
- * @param processFn Function to process each item
- * @param chunkSize Number of items to process in parallel
- * @param onProgress Optional callback for progress updates
- * @returns Array of processed results
- */
+// Function to process images in chunks
 export const processImagesInChunks = async <T>(
   items: T[],
   processFn: (item: T, index: number) => Promise<any>,
   chunkSize = 3,
   onProgress?: (processed: number, total: number) => void
 ): Promise<any[]> => {
-  const results: any[] = [];
-  const total = items.length;
-  let processed = 0;
-  
+  const results: any[] = []
+  const total = items.length
+  let processed = 0
+
   // Process in chunks
   for (let i = 0; i < total; i += chunkSize) {
-    const chunk = items.slice(i, i + chunkSize);
-    
+    const chunk = items.slice(i, i + chunkSize)
+
     // Process current chunk in parallel
     const chunkResults = await Promise.all(
       chunk.map(async (item, chunkIndex) => {
         try {
-          // Pass both item and global index to the processing function
-          return await processFn(item, i + chunkIndex);
+          return await processFn(item, i + chunkIndex)
         } catch (error) {
-          console.error('Error processing item:', error);
-          return null;
+          console.error("Error processing item:", error)
+          return null
         } finally {
-          processed++;
+          processed++
           if (onProgress) {
-            onProgress(processed, total);
+            onProgress(processed, total)
           }
         }
-      })
-    );
-    
+      }),
+    )
+
     // Add results from this chunk
-    results.push(...chunkResults.filter(r => r !== null));
+    results.push(...chunkResults.filter((r) => r !== null))
   }
-  
-  return results;
+
+  return results
 }
-// Utility function to process arrays in batches
-export async function processImagesInBatches<T, R>(
+
+// Function to process images in batches
+export const processImagesInBatches = async <T>(
   items: T[],
-  processFunction: (item: T, index: number) => Promise<R>,
-  batchSize = 3
-): Promise<R[]> {
-  const results: R[] = [];
-  
+  processFn: (item: T, index: number) => Promise<any>,
+  batchSize = 3,
+  onProgress?: (processed: number, total: number) => void
+): Promise<any[]> => {
+  const results: any[] = []
+  const total = items.length
+  let processed = 0
+
   // Process in batches
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize);
-    const batchPromises = batch.map((item, batchIndex) => 
-      processFunction(item, i + batchIndex)
-    );
-    
-    // Wait for the current batch to complete
-    const batchResults = await Promise.all(batchPromises);
-    results.push(...batchResults);
+  for (let i = 0; i < total; i += batchSize) {
+    const chunk = items.slice(i, i + batchSize)
+    console.log(
+      `Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(total / batchSize)}, size: ${chunk.length}`,
+    )
+
+    // Process current chunk in parallel
+    const chunkResults = await Promise.all(
+      chunk.map(async (item, chunkIndex) => {
+        try {
+          const result = await processFn(item, i + chunkIndex)
+          processed++
+          if (onProgress) {
+            onProgress(processed, total)
+          }
+          return result
+        } catch (error) {
+          console.error("Error processing item:", error)
+          processed++
+          if (onProgress) {
+            onProgress(processed, total)
+          }
+          return { error: error.message || "Unknown error" }
+        }
+      }),
+    )
+
+    // Add results from this chunk
+    results.push(...chunkResults)
   }
-  
-  return results;
+
+  return results
 }

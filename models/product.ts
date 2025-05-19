@@ -1,6 +1,6 @@
 import { query } from "../database/connection"
 import type { ProductInput, ProductSize, ProductImage, ProductWithDetails } from "@/types"
-import { uploadBase64, uploadBuffer, getObjectUrl, deleteObject } from "../services/backup"
+import { uploadBase64, uploadBuffer, deleteObject, getPublicObjectUrl } from "../services/backup"
 
 /**
  * Delete a product with a safe approach first, then force delete if needed
@@ -217,21 +217,14 @@ export const getAllProductsWithoutPagination = async (
     // Create a map for quick lookup
     const imagesMap = new Map()
 
-    // Process images to get signed URLs if they use S3
-    const processedImages = await Promise.all(
-      imagesResult.rows.map(async (img) => {
-        // If the image uses S3 storage, get a signed URL
-        if (img.s3_key) {
-          try {
-            img.image_url = await getObjectUrl(img.s3_key)
-          } catch (error) {
-            console.error(`Error getting signed URL for image ${img.id}:`, error)
-            // Keep the existing URL if there's an error
-          }
-        }
-        return img
-      }),
-    )
+    // Process images to use direct public URLs if they have S3 keys
+    const processedImages = imagesResult.rows.map((img) => {
+      // If the image uses S3 storage, use the public URL
+      if (img.s3_key) {
+        img.image_url = getPublicObjectUrl(img.s3_key)
+      }
+      return img
+    })
 
     // Organize images by product
     processedImages.forEach((img) => {
@@ -336,21 +329,14 @@ export const getAllProducts = async (
     // Create a map for quick lookup
     const imagesMap = new Map()
 
-    // Process images to get signed URLs if they use S3
-    const processedImages = await Promise.all(
-      imagesResult.rows.map(async (img) => {
-        // If the image uses S3 storage, get a signed URL
-        if (img.s3_key) {
-          try {
-            img.image_url = await getObjectUrl(img.s3_key)
-          } catch (error) {
-            console.error(`Error getting signed URL for image ${img.id}:`, error)
-            // Keep the existing URL if there's an error
-          }
-        }
-        return img
-      }),
-    )
+    // Process images to use direct public URLs if they have S3 keys
+    const processedImages = imagesResult.rows.map((img) => {
+      // If the image uses S3 storage, use the public URL
+      if (img.s3_key) {
+        img.image_url = getPublicObjectUrl(img.s3_key)
+      }
+      return img
+    })
 
     // Organize images by product
     processedImages.forEach((img) => {
@@ -435,21 +421,14 @@ export const getProductById = async (id: number): Promise<ProductWithDetails | n
       id,
     ])
 
-    // Process images to get signed URLs if they use S3
-    const images = await Promise.all(
-      imagesResult.rows.map(async (img) => {
-        // If the image uses S3 storage, get a signed URL
-        if (img.s3_key) {
-          try {
-            img.image_url = await getObjectUrl(img.s3_key)
-          } catch (error) {
-            console.error(`Error getting signed URL for image ${img.id}:`, error)
-            // Keep the existing URL if there's an error
-          }
-        }
-        return img
-      }),
-    )
+    // Process images to use direct public URLs if they have S3 keys
+    const images = imagesResult.rows.map((img) => {
+      // If the image uses S3 storage, use the public URL
+      if (img.s3_key) {
+        img.image_url = getPublicObjectUrl(img.s3_key)
+      }
+      return img
+    })
 
     // Get sizes
     const sizesResult = await query("SELECT * FROM product_sizes WHERE product_id = $1", [id])
@@ -704,7 +683,13 @@ export const addProductImage = async (
     // Get the inserted image
     const imagesResult = await query(`SELECT * FROM product_images WHERE id = $1`, [result.rows[0].id])
 
-    return imagesResult.rows[0]
+    // If the image has an S3 key, use the public URL
+    const image = imagesResult.rows[0]
+    if (image.s3_key) {
+      image.image_url = getPublicObjectUrl(image.s3_key)
+    }
+
+    return image
   } catch (error) {
     console.error(`Error adding image to product ${productId}:`, error)
     throw error
@@ -941,21 +926,14 @@ export const searchProductsByQuery = async (searchQuery: string): Promise<Produc
     `
     const sizesResult = await query(sizesQuery, [productIds])
 
-    // Process images to get signed URLs if they use S3
-    const processedImages = await Promise.all(
-      imagesResult.rows.map(async (img) => {
-        // If the image uses S3 storage, get a signed URL
-        if (img.s3_key) {
-          try {
-            img.image_url = await getObjectUrl(img.s3_key)
-          } catch (error) {
-            console.error(`Error getting signed URL for image ${img.id}:`, error)
-            // Keep the existing URL if there's an error
-          }
-        }
-        return img
-      }),
-    )
+    // Process images to use direct public URLs if they have S3 keys
+    const processedImages = imagesResult.rows.map((img) => {
+      // If the image uses S3 storage, use the public URL
+      if (img.s3_key) {
+        img.image_url = getPublicObjectUrl(img.s3_key)
+      }
+      return img
+    })
 
     // Create maps for quick lookup
     const imagesMap = new Map()
@@ -1097,7 +1075,13 @@ export const addProductImageByUrl = async (
         ],
       )
 
-      return result.rows[0]
+      // If the image has an S3 key, use the public URL
+      const image = result.rows[0]
+      if (image.s3_key) {
+        image.image_url = getPublicObjectUrl(image.s3_key)
+      }
+
+      return image
     } catch (error) {
       console.error("Error downloading and storing image in S3:", error)
 
