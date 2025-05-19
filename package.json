@@ -4,7 +4,7 @@
   "description": "Backend API for fashion e-commerce website",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run seed && next build",
     "start": "next start",
     "lint": "next lint",
     "seed": "ts-node database/seed.ts",
