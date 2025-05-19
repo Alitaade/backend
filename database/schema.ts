@@ -307,3 +307,59 @@ export const verifyTables = async () => {
     return false;
   }
 };
+
+/**
+ * Migration to add s3_key column to product_images table
+ */
+export async function addS3KeyToProductImages() {
+  try {
+    console.log("Starting migration: Add s3_key to product_images table")
+
+    // Check if the column already exists
+    const checkColumnQuery = `
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'product_images' AND column_name = 's3_key'
+    `
+
+    const columnCheck = await query(checkColumnQuery)
+
+    if (columnCheck.rows.length > 0) {
+      console.log("Column s3_key already exists in product_images table")
+      return
+    }
+
+    // Add the s3_key column
+    await query(`
+      ALTER TABLE product_images 
+      ADD COLUMN s3_key VARCHAR(255)
+    `)
+
+    console.log("Successfully added s3_key column to product_images table")
+
+    // Create an index on s3_key for faster lookups
+    await query(`
+      CREATE INDEX idx_product_images_s3_key ON product_images(s3_key)
+    `)
+
+    console.log("Successfully created index on s3_key column")
+
+    console.log("Migration completed successfully")
+  } catch (error) {
+    console.error("Error in migration:", error)
+    throw error
+  }
+}
+
+// Run the migration if this file is executed directly
+if (require.main === module) {
+  addS3KeyToProductImages()
+    .then(() => {
+      console.log("Migration completed successfully")
+      process.exit(0)
+    })
+    .catch((error) => {
+      console.error("Migration failed:", error)
+      process.exit(1)
+    })
+}
