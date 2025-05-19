@@ -3139,7 +3139,7 @@ const seedTestUsers = async () => {
     return await executeTransaction(async (client) => {
     for (const user of testUsers) {
       const existingUser = await query("SELECT * FROM users WHERE email = $1", [
-        user.email, client
+        user.email
       ]);
 
       if (existingUser.rows.length === 0) {
@@ -3147,17 +3147,17 @@ const seedTestUsers = async () => {
 
         await query(
           "INSERT INTO users (email, password, first_name, last_name) VALUES ($1, $2, $3, $4)",
-          [user.email, hashedPassword, user.first_name, user.last_name], client
+          [user.email, hashedPassword, user.first_name, user.last_name]
         );
 
         // Create a cart for the user
         const userResult = await query(
           "SELECT id FROM users WHERE email = $1",
-          [user.email], client
+          [user.email]
         );
         const userId = userResult.rows[0].id;
 
-        await query("INSERT INTO carts (user_id) VALUES ($1)", [userId], client);
+        await query("INSERT INTO carts (user_id) VALUES ($1)", [userId]);
       }
     }
 
