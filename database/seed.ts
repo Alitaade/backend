@@ -3061,7 +3061,7 @@ const seedProducts = async () => {
       // Check if product already exists
       const existingProduct = await query(
         "SELECT * FROM products WHERE name = $1",
-        [product.name], client
+        [product.name]
       );
 
       if (existingProduct.rows.length === 0) {
@@ -3076,7 +3076,7 @@ const seedProducts = async () => {
             product.price,
             categoryId,
             product.stock_quantity,
-          ], client
+          ]
         );
 
         const productId = productResult.rows[0].id;
@@ -3088,7 +3088,7 @@ const seedProducts = async () => {
           );
           await query(
             "INSERT INTO product_sizes (product_id, size, stock_quantity) VALUES ($1, $2, $3)",
-            [productId, size, sizeStockQuantity], client
+            [productId, size, sizeStockQuantity]
           );
         }
 
@@ -3104,7 +3104,7 @@ const seedProducts = async () => {
               image.width,
               image.height,
               image.alt_text,
-            ], client
+            ]
           );
         }
       }
@@ -3139,7 +3139,7 @@ const seedTestUsers = async () => {
     return await executeTransaction(async (client) => {
     for (const user of testUsers) {
       const existingUser = await query("SELECT * FROM users WHERE email = $1", [
-        user.email
+        user.email,
       ]);
 
       if (existingUser.rows.length === 0) {
