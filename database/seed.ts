@@ -3218,8 +3218,9 @@ const seedTestOrders = async () => {
     console.error("Error seeding test orders:", error);
   }
 };
+
 // Helper function to check if a table exists
-const checkTableExists = async (tableName) => {
+const checkTableExists = async (tableName: string): Promise<boolean> => {
   try {
     const result = await query(`
       SELECT EXISTS (
