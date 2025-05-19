@@ -3271,7 +3271,6 @@ const seedDatabase = async () => {
     }
     
     await seedProducts();
-    await seedTestUsers();
     await seedTestOrders();
     
     console.log("Database seeding completed successfully");
