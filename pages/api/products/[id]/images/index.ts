@@ -10,18 +10,17 @@ export const config = {
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Enable CORS for all requests
+
   if (req.method === "OPTIONS") {
     res.setHeader("Access-Control-Allow-Origin", "*") // Replace with specific origin in production
     res.setHeader("Access-Control-Allow-Methods", "POST, PUT, OPTIONS")
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, X-CSRF-Token")
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
     return res.status(200).end()
   }
 
   // Log content type for debugging
   console.log("Content-Type header:", req.headers["content-type"]);
-  console.log(`Received ${req.method} request to ${req.url}`);
-  
+
   switch (req.method) {
     case "POST":
     case "PUT":

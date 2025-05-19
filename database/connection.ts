@@ -7,9 +7,9 @@ const pool = new Pool({
     process.env.NODE_ENV === "production"
       ? { rejectUnauthorized: true }
       : false,
-  max: 90, // Reduced from 50 to avoid connection overload
-  idleTimeoutMillis: 30000, // Reduced to 30 seconds
-  connectionTimeoutMillis: 90000, // 5 seconds connection timeout
+  max: 200, // Reduced from 50 to avoid connection overload
+  idleTimeoutMillis: 300000, // Reduced to 30 seconds
+  connectionTimeoutMillis: 900000, // 5 seconds connection timeout
   // statement_timeout removed from here - will be set at session level
 });
 
@@ -28,7 +28,7 @@ export const query = async (text: string, params?: any[]) => {
     client = await pool.connect();
     
     // Set statement timeout at the session level
-    await client.query('SET statement_timeout = 10000');
+    await client.query('SET statement_timeout = 100000');
     
     // Use parameterized queries to prevent SQL injection
     const res = await client.query(text, params);
