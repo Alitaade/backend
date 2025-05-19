@@ -1,5 +1,6 @@
 import { query } from "../database/connection"
 import type { ProductInput, ProductSize, ProductImage, ProductWithDetails } from "@/types"
+import { uploadBase64, uploadBuffer, getObjectUrl, deleteObject } from "../services/backup"
 
 /**
  * Delete a product with a safe approach first, then force delete if needed
@@ -10,12 +11,12 @@ export const deleteProduct = async (id: number | string): Promise<{ success: boo
   try {
     // Try normal delete first
     const result = await query("DELETE FROM products WHERE id = $1 RETURNING id", [id])
-    
+
     // If normal delete succeeded, return success
     if (result.rows.length > 0) {
       return { success: true }
     }
-    
+
     // If normal delete didn't work, try force delete
     console.log(`Regular delete failed for product ${id}, attempting force delete...`)
     return await forceDeleteProduct(id)
@@ -23,7 +24,7 @@ export const deleteProduct = async (id: number | string): Promise<{ success: boo
     console.error("Error in deleteProduct:", error)
     //@ts-ignore
     // Check if this is a foreign key constraint error
-    if (error.code === '23503') {
+    if (error.code === "23503") {
       console.log("Foreign key constraint violation detected, attempting force delete")
       return await forceDeleteProduct(id)
     }
@@ -37,16 +38,20 @@ export const deleteProduct = async (id: number | string): Promise<{ success: boo
  * @param id Product ID to force delete
  * @returns Object with success status and optional message
  */
-export const forceDeleteProduct = async (id: number| string): Promise<{ success: boolean; message?: string }> => {
+export const forceDeleteProduct = async (id: number | string): Promise<{ success: boolean; message?: string }> => {
   let client = null
-  
+
   try {
     // Get a client for transaction
-    client = await query('BEGIN')
-    
+    client = await query("BEGIN")
+
     try {
       console.log(`Starting force delete for product ${id}...`)
-      
+
+      // Get product images to delete from S3 later
+      const imagesResult = await query("SELECT * FROM product_images WHERE product_id = $1", [id])
+      const imagesToDelete = imagesResult.rows || []
+
       // 1. Delete from order_items first - handle case where no rows exist
       const orderItemsResult = await query("DELETE FROM order_items WHERE product_id = $1", [id])
       console.log(`Deleted ${orderItemsResult.rowCount || 0} order_items references`)
@@ -56,8 +61,8 @@ export const forceDeleteProduct = async (id: number| string): Promise<{ success:
       console.log(`Deleted ${cartItemsResult.rowCount || 0} cart_items references`)
 
       // 3. Delete product images - handle case where no rows exist
-      const imagesResult = await query("DELETE FROM product_images WHERE product_id = $1", [id])
-      console.log(`Deleted ${imagesResult.rowCount || 0} product images`)
+      await query("DELETE FROM product_images WHERE product_id = $1", [id])
+      console.log(`Deleted ${imagesResult.rowCount || 0} product images from database`)
 
       // 4. Delete product sizes - handle case where no rows exist
       const sizesResult = await query("DELETE FROM product_sizes WHERE product_id = $1", [id])
@@ -72,10 +77,25 @@ export const forceDeleteProduct = async (id: number| string): Promise<{ success:
         return { success: false, message: "Product not found" }
       }
 
-      console.log(`Successfully deleted product ${id}`)
+      console.log(`Successfully deleted product ${id} from database`)
 
       // Commit the transaction
       await query("COMMIT")
+
+      // After successful database deletion, delete images from S3
+      try {
+        // Delete each image from S3
+        for (const image of imagesToDelete) {
+          if (image.s3_key) {
+            await deleteObject(image.s3_key)
+            console.log(`Deleted image from S3: ${image.s3_key}`)
+          }
+        }
+      } catch (s3Error) {
+        // Log but don't fail the operation if S3 deletion fails
+        console.error("Error deleting images from S3:", s3Error)
+      }
+
       return { success: true }
     } catch (error) {
       // Rollback the transaction in case of error
@@ -89,6 +109,7 @@ export const forceDeleteProduct = async (id: number| string): Promise<{ success:
     return { success: false, message: error.message || "Couldn't start delete transaction" }
   }
 }
+
 /**
  * Calculate total stock from product sizes
  * @param productId Product ID to calculate stock for
@@ -96,9 +117,10 @@ export const forceDeleteProduct = async (id: number| string): Promise<{ success:
  */
 export const calculateTotalStock = async (productId: number): Promise<number> => {
   try {
-    const result = await query("SELECT COALESCE(SUM(stock_quantity), 0) as total FROM product_sizes WHERE product_id = $1", [
-      productId,
-    ])
+    const result = await query(
+      "SELECT COALESCE(SUM(stock_quantity), 0) as total FROM product_sizes WHERE product_id = $1",
+      [productId],
+    )
 
     return Number.parseInt(result.rows[0].total || "0", 10)
   } catch (error) {
@@ -194,7 +216,25 @@ export const getAllProductsWithoutPagination = async (
 
     // Create a map for quick lookup
     const imagesMap = new Map()
-    imagesResult.rows.forEach((img) => {
+
+    // Process images to get signed URLs if they use S3
+    const processedImages = await Promise.all(
+      imagesResult.rows.map(async (img) => {
+        // If the image uses S3 storage, get a signed URL
+        if (img.s3_key) {
+          try {
+            img.image_url = await getObjectUrl(img.s3_key)
+          } catch (error) {
+            console.error(`Error getting signed URL for image ${img.id}:`, error)
+            // Keep the existing URL if there's an error
+          }
+        }
+        return img
+      }),
+    )
+
+    // Organize images by product
+    processedImages.forEach((img) => {
       if (!imagesMap.has(img.product_id)) {
         imagesMap.set(img.product_id, [])
       }
@@ -295,7 +335,25 @@ export const getAllProducts = async (
 
     // Create a map for quick lookup
     const imagesMap = new Map()
-    imagesResult.rows.forEach((img) => {
+
+    // Process images to get signed URLs if they use S3
+    const processedImages = await Promise.all(
+      imagesResult.rows.map(async (img) => {
+        // If the image uses S3 storage, get a signed URL
+        if (img.s3_key) {
+          try {
+            img.image_url = await getObjectUrl(img.s3_key)
+          } catch (error) {
+            console.error(`Error getting signed URL for image ${img.id}:`, error)
+            // Keep the existing URL if there's an error
+          }
+        }
+        return img
+      }),
+    )
+
+    // Organize images by product
+    processedImages.forEach((img) => {
       if (!imagesMap.has(img.product_id)) {
         imagesMap.set(img.product_id, [])
       }
@@ -377,12 +435,28 @@ export const getProductById = async (id: number): Promise<ProductWithDetails | n
       id,
     ])
 
+    // Process images to get signed URLs if they use S3
+    const images = await Promise.all(
+      imagesResult.rows.map(async (img) => {
+        // If the image uses S3 storage, get a signed URL
+        if (img.s3_key) {
+          try {
+            img.image_url = await getObjectUrl(img.s3_key)
+          } catch (error) {
+            console.error(`Error getting signed URL for image ${img.id}:`, error)
+            // Keep the existing URL if there's an error
+          }
+        }
+        return img
+      }),
+    )
+
     // Get sizes
     const sizesResult = await query("SELECT * FROM product_sizes WHERE product_id = $1", [id])
 
     return {
       ...product,
-      images: imagesResult.rows,
+      images,
       sizes: sizesResult.rows,
     }
   } catch (error) {
@@ -410,7 +484,7 @@ export const createProduct = async (
   }[],
 ): Promise<ProductWithDetails> => {
   let client = null
-  
+
   try {
     // Start a transaction
     client = await query("BEGIN")
@@ -449,17 +523,57 @@ export const createProduct = async (
     // Insert images if provided
     if (images && images.length > 0) {
       for (const image of images) {
-        await query(
-          "INSERT INTO product_images (product_id, image_url, is_primary, width, height, alt_text) VALUES ($1, $2, $3, $4, $5, $6)",
-          [
-            product.id,
-            image.image_url,
-            image.is_primary || false,
-            image.width || null,
-            image.height || null,
-            image.alt_text || null,
-          ],
-        )
+        // Check if the image is a base64 string
+        if (image.image_url && image.image_url.startsWith("data:")) {
+          try {
+            // Upload to S3 instead of storing base64 in database
+            const { key, url } = await uploadBase64(image.image_url, `product_${product.id}_image`, {
+              productId: product.id.toString(),
+              altText: image.alt_text || "",
+            })
+
+            // Store the S3 key and URL in the database
+            await query(
+              "INSERT INTO product_images (product_id, image_url, s3_key, is_primary, width, height, alt_text) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+              [
+                product.id,
+                url, // Store the URL for backward compatibility
+                key, // Store the S3 key for future reference
+                image.is_primary || false,
+                image.width || null,
+                image.height || null,
+                image.alt_text || null,
+              ],
+            )
+          } catch (error) {
+            console.error("Error uploading image to S3:", error)
+            // Fall back to storing base64 in database if S3 upload fails
+            await query(
+              "INSERT INTO product_images (product_id, image_url, is_primary, width, height, alt_text) VALUES ($1, $2, $3, $4, $5, $6)",
+              [
+                product.id,
+                image.image_url,
+                image.is_primary || false,
+                image.width || null,
+                image.height || null,
+                image.alt_text || null,
+              ],
+            )
+          }
+        } else {
+          // For non-base64 URLs, just store the URL
+          await query(
+            "INSERT INTO product_images (product_id, image_url, is_primary, width, height, alt_text) VALUES ($1, $2, $3, $4, $5, $6)",
+            [
+              product.id,
+              image.image_url,
+              image.is_primary || false,
+              image.width || null,
+              image.height || null,
+              image.alt_text || null,
+            ],
+          )
+        }
       }
     }
 
@@ -552,7 +666,7 @@ export const updateProduct = async (
 /**
  * Add a new image to a product
  * @param product_id Product ID
- * @param image_url URL of the image
+ * @param image_url URL or base64 of the image
  * @param is_primary Whether this is the primary image
  * @param width Optional width
  * @param height Optional height
@@ -573,12 +687,49 @@ export const addProductImage = async (
       await query("UPDATE product_images SET is_primary = false WHERE product_id = $1", [product_id])
     }
 
-    const result = await query(
-      "INSERT INTO product_images (product_id, image_url, is_primary, width, height, alt_text) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
-      [product_id, image_url, is_primary, width || null, height || null, alt_text || null],
-    )
+    // Check if the image is a base64 string
+    if (image_url.startsWith("data:")) {
+      try {
+        // Upload to S3 instead of storing base64 in database
+        const { key, url } = await uploadBase64(image_url, `product_${product_id}_image`, {
+          productId: product_id.toString(),
+          altText: alt_text || "",
+        })
 
-    return result.rows[0]
+        // Store the S3 key and URL in the database
+        const result = await query(
+          "INSERT INTO product_images (product_id, image_url, s3_key, is_primary, width, height, alt_text) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+          [
+            product_id,
+            url, // Store the URL for backward compatibility
+            key, // Store the S3 key for future reference
+            is_primary,
+            width || null,
+            height || null,
+            alt_text || null,
+          ],
+        )
+
+        return result.rows[0]
+      } catch (error) {
+        console.error("Error uploading image to S3:", error)
+        // Fall back to storing base64 in database if S3 upload fails
+        const result = await query(
+          "INSERT INTO product_images (product_id, image_url, is_primary, width, height, alt_text) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+          [product_id, image_url, is_primary, width || null, height || null, alt_text || null],
+        )
+
+        return result.rows[0]
+      }
+    } else {
+      // For non-base64 URLs, just store the URL
+      const result = await query(
+        "INSERT INTO product_images (product_id, image_url, is_primary, width, height, alt_text) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+        [product_id, image_url, is_primary, width || null, height || null, alt_text || null],
+      )
+
+      return result.rows[0]
+    }
   } catch (error) {
     console.error("Error adding product image:", error)
     throw error
@@ -592,8 +743,34 @@ export const addProductImage = async (
  */
 export const deleteProductImage = async (id: number): Promise<boolean> => {
   try {
+    // First, get the image to check if it has an S3 key
+    const imageResult = await query("SELECT * FROM product_images WHERE id = $1", [id])
+
+    if (imageResult.rows.length === 0) {
+      return false
+    }
+
+    const image = imageResult.rows[0]
+
+    // Delete from database
     const result = await query("DELETE FROM product_images WHERE id = $1 RETURNING id", [id])
-    return result.rows.length > 0
+
+    if (result.rows.length === 0) {
+      return false
+    }
+
+    // If the image was stored in S3, delete it from there too
+    if (image.s3_key) {
+      try {
+        await deleteObject(image.s3_key)
+        console.log(`Deleted image from S3: ${image.s3_key}`)
+      } catch (s3Error) {
+        // Log but don't fail the operation if S3 deletion fails
+        console.error(`Error deleting image from S3: ${image.s3_key}`, s3Error)
+      }
+    }
+
+    return true
   } catch (error) {
     console.error("Error deleting product image:", error)
     throw error
@@ -619,7 +796,7 @@ export const updateProductSize = async (
       size,
     ])
 
-    let result;
+    let result
 
     // Start transaction outside of nested try/catch
     await query("BEGIN")
@@ -765,14 +942,14 @@ export const searchProductsByQuery = async (searchQuery: string): Promise<Produc
     )
 
     const products = productsResult.rows
-    
+
     if (products.length === 0) {
       return []
     }
 
     // Use the bulk fetching approach for better performance
-    const productIds = products.map(p => p.id)
-    
+    const productIds = products.map((p) => p.id)
+
     // Get all images for these products in a single query
     const imagesQuery = `
       SELECT * FROM product_images 
@@ -789,9 +966,25 @@ export const searchProductsByQuery = async (searchQuery: string): Promise<Produc
     `
     const sizesResult = await query(sizesQuery, [productIds])
 
+    // Process images to get signed URLs if they use S3
+    const processedImages = await Promise.all(
+      imagesResult.rows.map(async (img) => {
+        // If the image uses S3 storage, get a signed URL
+        if (img.s3_key) {
+          try {
+            img.image_url = await getObjectUrl(img.s3_key)
+          } catch (error) {
+            console.error(`Error getting signed URL for image ${img.id}:`, error)
+            // Keep the existing URL if there's an error
+          }
+        }
+        return img
+      }),
+    )
+
     // Create maps for quick lookup
     const imagesMap = new Map()
-    imagesResult.rows.forEach((img) => {
+    processedImages.forEach((img) => {
       if (!imagesMap.has(img.product_id)) {
         imagesMap.set(img.product_id, [])
       }
@@ -894,12 +1087,53 @@ export const addProductImageByUrl = async (
       await query("UPDATE product_images SET is_primary = false WHERE product_id = $1", [product_id])
     }
 
-    const result = await query(
-      "INSERT INTO product_images (product_id, image_url, is_primary, width, height, alt_text) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
-      [product_id, image_url, is_primary, width || null, height || null, alt_text || null],
-    )
+    // For URL-based images, we'll try to download and store in S3 if possible
+    try {
+      // Fetch the image
+      const response = await fetch(image_url)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.statusText}`)
+      }
 
-    return result.rows[0]
+      // Get the content type
+      const contentType = response.headers.get("content-type") || "image/jpeg"
+
+      // Convert to buffer
+      const arrayBuffer = await response.arrayBuffer()
+      const buffer = Buffer.from(arrayBuffer)
+
+      // Upload to S3
+      const { key, url } = await uploadBuffer(buffer, contentType, `product_${product_id}_image`, {
+        productId: product_id.toString(),
+        altText: alt_text || "",
+      })
+
+      // Store in database with S3 key
+      const result = await query(
+        "INSERT INTO product_images (product_id, image_url, s3_key, is_primary, width, height, alt_text) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+        [
+          product_id,
+          url, // Store the URL for backward compatibility
+          key, // Store the S3 key for future reference
+          is_primary,
+          width || null,
+          height || null,
+          alt_text || null,
+        ],
+      )
+
+      return result.rows[0]
+    } catch (error) {
+      console.error("Error downloading and storing image in S3:", error)
+
+      // Fall back to just storing the URL
+      const result = await query(
+        "INSERT INTO product_images (product_id, image_url, is_primary, width, height, alt_text) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+        [product_id, image_url, is_primary, width || null, height || null, alt_text || null],
+      )
+
+      return result.rows[0]
+    }
   } catch (error) {
     console.error("Error adding product image by URL:", error)
     throw error

@@ -22,13 +22,9 @@ import {
 import { ensureImageDimensions, processImagesInBatches } from "../utils/image-utils"
 import { getAllCategories } from "../models/category"
 import formidable from "formidable";
+import { uploadBuffer } from "../services/backup"
 import fs from "fs";
-const formidableConfig = {
-  keepExtensions: true,
-  maxFileSize: 10 * 1024 * 1024, // 10MB limit per file
-  maxFields: 10,
-  multiples: true,
-}
+
 
 export const config = {
   api: {
@@ -585,11 +581,21 @@ export const handleOctetStreamUpload = async (req: NextApiRequest, res: NextApiR
       console.log(`Detected file type: ${fileType}`)
     }
 
-    // Convert to base64
-    const base64Data = `data:${fileType};base64,${buffer.toString("base64")}`
+    // Upload directly to S3
+    const { key, url } = await uploadBuffer(buffer, fileType, filename, {
+      productId: productId.toString(),
+      altText: altText,
+    })
 
-    // Add the image to product
-    const image = await addProductImage(productId, base64Data, isPrimary, undefined, undefined, altText)
+    // Add the image to product with S3 key
+    const image = await addProductImage(
+      productId,
+      url, // Use the S3 URL
+      isPrimary,
+      undefined,
+      undefined,
+      altText,
+    )
 
     console.log(`Successfully added image ID ${image.id} to product ${productId}`)
 
@@ -608,7 +614,8 @@ export const handleOctetStreamUpload = async (req: NextApiRequest, res: NextApiR
   }
 }
 
-// Process FormData uploads (binary file uploads) - kept for backward compatibility
+
+// Process FormData uploads (binary file uploads)
 export const handleFormDataUpload = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     const startTime = Date.now()
@@ -621,10 +628,11 @@ export const handleFormDataUpload = async (req: NextApiRequest, res: NextApiResp
 
     // Configure formidable with more debugging
     const form = formidable({
-      keepExtensions: true,
-      maxFileSize: 10 * 1024 * 1024, // 10MB limit per file
-      maxFields: 10,
+      ...formidableConfig,
       multiples: true,
+      keepExtensions: true,
+      maxFileSize: 10 * 1024 * 1024, // 10MB
+      // Add this to ensure files are properly parsed
       encoding: "utf-8",
       uploadDir: "/tmp",
       filter: (part) => {
@@ -733,13 +741,21 @@ export const handleFormDataUpload = async (req: NextApiRequest, res: NextApiResp
           const fileData = await fs.promises.readFile(file.filepath)
           console.log(`Read ${fileData.length} bytes from ${file.filepath}`)
 
-          // Convert to base64
-          const base64Data = `data:${file.mimetype || "image/jpeg"};base64,${fileData.toString("base64")}`
+          // Upload directly to S3 instead of converting to base64
+          const { key, url } = await uploadBuffer(
+            fileData,
+            file.mimetype || "image/jpeg",
+            file.originalFilename || `product_${productId}_image_${i}`,
+            {
+              productId: productId.toString(),
+              altText: defaultAltText || `Product ${productId} image ${i + 1}`,
+            },
+          )
 
-          // Add the image to product
+          // Add the image to product with S3 key
           const image = await addProductImage(
             productId,
-            base64Data,
+            url, // Use the S3 URL
             i === 0 && isPrimary,
             undefined,
             undefined,
