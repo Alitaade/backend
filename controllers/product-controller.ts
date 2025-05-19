@@ -520,7 +520,95 @@ const readBody = (req: NextApiRequest): Promise<string> => {
   })
 }
 
-// Process FormData uploads (binary file uploads)
+// Process application/octet-stream uploads (direct binary file uploads)
+export const handleOctetStreamUpload = async (req: NextApiRequest, res: NextApiResponse) => {
+  try {
+    const startTime = Date.now()
+    const { id } = req.query
+    if (!id) return res.status(400).json({ error: "Product ID is required" })
+    const productId = Number.parseInt(id as string)
+
+    console.log("Processing octet-stream upload for product ID:", productId)
+
+    // Get metadata from headers and query parameters
+    const contentDisposition = req.headers["content-disposition"]
+    const xFileName = req.headers["x-file-name"]
+    const xFileSize = req.headers["x-file-size"]
+    const xFileType = req.headers["x-file-type"]
+
+    // Get filename from headers
+    let filename = "unknown-file"
+    if (xFileName) {
+      filename = decodeURIComponent(xFileName as string)
+    } else if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename="(.+)"/)
+      if (filenameMatch && filenameMatch[1]) {
+        filename = decodeURIComponent(filenameMatch[1])
+      }
+    }
+
+    // Get file type from headers
+    let fileType = (xFileType as string) || "image/jpeg"
+
+    console.log(`Processing binary file: ${filename}, type: ${fileType}, size: ${xFileSize || "unknown"}`)
+
+    // Get additional parameters from query string
+    const isPrimary = req.query.isPrimary === "true"
+    const altText = (req.query.altText as string) || `Product ${productId} image`
+
+    console.log(`File metadata - isPrimary: ${isPrimary}, altText: ${altText}`)
+
+    // Read the binary data from the request
+    const chunks: Buffer[] = []
+    for await (const chunk of req) {
+      chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk)
+    }
+
+    const buffer = Buffer.concat(chunks)
+    console.log(`Received ${buffer.length} bytes of binary data`)
+
+    if (buffer.length === 0) {
+      return res.status(400).json({ error: "Empty file received" })
+    }
+
+    // Determine MIME type from buffer signature if not provided
+    if (!fileType || fileType === "application/octet-stream") {
+      if (buffer[0] === 0xff && buffer[1] === 0xd8) {
+        fileType = "image/jpeg"
+      } else if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+        fileType = "image/png"
+      } else if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) {
+        fileType = "image/gif"
+      } else {
+        fileType = "application/octet-stream"
+      }
+      console.log(`Detected file type: ${fileType}`)
+    }
+
+    // Convert to base64
+    const base64Data = `data:${fileType};base64,${buffer.toString("base64")}`
+
+    // Add the image to product
+    const image = await addProductImage(productId, base64Data, isPrimary, undefined, undefined, altText)
+
+    console.log(`Successfully added image ID ${image.id} to product ${productId}`)
+
+    // Log processing time
+    const processingTime = Date.now() - startTime
+    console.log(`Octet-stream file processed in ${processingTime}ms`)
+
+    return res.status(200).json({
+      message: "File processed",
+      processingTimeMs: processingTime,
+      uploadedFile: image,
+    })
+  } catch (error) {
+    console.error("Server error in handleOctetStreamUpload:", error)
+    return res.status(500).json({ error: `Server error: ${error.message}` })
+  }
+}
+
+// Process FormData uploads (binary file uploads) - kept for backward compatibility
 export const handleFormDataUpload = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     const startTime = Date.now()
@@ -533,11 +621,10 @@ export const handleFormDataUpload = async (req: NextApiRequest, res: NextApiResp
 
     // Configure formidable with more debugging
     const form = formidable({
-      ...formidableConfig,
-      multiples: true,
       keepExtensions: true,
-      maxFileSize: 10 * 1024 * 1024, // 10MB
-      // Add this to ensure files are properly parsed
+      maxFileSize: 10 * 1024 * 1024, // 10MB limit per file
+      maxFields: 10,
+      multiples: true,
       encoding: "utf-8",
       uploadDir: "/tmp",
       filter: (part) => {
@@ -693,6 +780,7 @@ export const handleFormDataUpload = async (req: NextApiRequest, res: NextApiResp
   }
 }
 
+
 // Process JSON uploads (for base64 images and URLs)
 export const handleJsonUpload = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
@@ -808,14 +896,17 @@ export const processUpload = async (req: NextApiRequest, res: NextApiResponse) =
     if (contentType.includes("application/json")) {
       // Handle JSON payload (for URLs and base64)
       return handleJsonUpload(req, res)
+    } else if (contentType.includes("application/octet-stream")) {
+      // Handle direct binary uploads
+      return handleOctetStreamUpload(req, res)
     } else if (contentType.includes("multipart/form-data")) {
-      // Handle FormData (for file uploads)
+      // For backward compatibility, still handle FormData
       return handleFormDataUpload(req, res)
     } else {
       // For other content types, return an appropriate error
       return res.status(415).json({
         error: "Unsupported Media Type",
-        message: "Only JSON or multipart/form-data payloads are supported.",
+        message: "Only JSON, application/octet-stream, or multipart/form-data payloads are supported.",
       })
     }
   } catch (error) {
@@ -824,10 +915,46 @@ export const processUpload = async (req: NextApiRequest, res: NextApiResponse) =
   }
 }
 
+
 // Handler for single image upload (used by FormData in frontend)
 export const handleSingleImageUpload = async (req: NextApiRequest, res: NextApiResponse) => {
   // Delegate to the FormData handler since it already handles single file case
   return handleFormDataUpload(req, res)
+}
+
+// Add a new endpoint for URL-based image uploads
+export const handleUrlUpload = async (req: NextApiRequest, res: NextApiResponse) => {
+  try {
+    const { id } = req.query
+    if (!id) return res.status(400).json({ error: "Product ID is required" })
+    const productId = Number.parseInt(id as string)
+
+    const { image_url, is_primary, alt_text } = req.body
+
+    if (!image_url) {
+      return res.status(400).json({ error: "Image URL is required" })
+    }
+
+    // Process the image to ensure it has dimensions
+    const processedImage = ensureImageDimensions(image_url)
+
+    const image = await addProductImageByUrl(
+      productId,
+      processedImage.url,
+      is_primary === true,
+      processedImage.width,
+      processedImage.height,
+      alt_text || `Product ${productId} image`,
+    )
+
+    return res.status(201).json({
+      message: "Image added successfully",
+      image,
+    })
+  } catch (error) {
+    console.error("Error in handleUrlUpload:", error)
+    return res.status(500).json({ error: `Server error: ${error.message}` })
+  }
 }
 
 // Export all functions for use in API routes
