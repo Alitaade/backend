@@ -50,7 +50,7 @@ export const createTables = async () => {
         )
       `);
 
-      // Create product images table
+      // Create product images table with s3_key column included
       await client.query(`
         CREATE TABLE IF NOT EXISTS product_images (
           id SERIAL PRIMARY KEY,
@@ -60,8 +60,14 @@ export const createTables = async () => {
           width INTEGER,
           height INTEGER,
           alt_text TEXT,
+          s3_key VARCHAR(255),
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
+      `);
+
+      // Create index on s3_key for product_images
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_product_images_s3_key ON product_images(s3_key)
       `);
 
       // Create product sizes table
@@ -309,45 +315,46 @@ export const verifyTables = async () => {
 };
 
 /**
- * Migration to add s3_key column to product_images table
+ * Migration to add s3_key column to product_images table (for existing databases)
+ * Note: This is only needed for updating existing databases, as new databases
+ * will already have this column from the createTables function
  */
 export async function addS3KeyToProductImages() {
   try {
-    console.log("Starting migration: Add s3_key to product_images table")
-
+    console.log("Starting migration: Add s3_key to product_images table");
+    
     // Check if the column already exists
     const checkColumnQuery = `
       SELECT column_name 
       FROM information_schema.columns 
       WHERE table_name = 'product_images' AND column_name = 's3_key'
-    `
-
-    const columnCheck = await query(checkColumnQuery)
-
+    `;
+    
+    const columnCheck = await query(checkColumnQuery);
+    
     if (columnCheck.rows.length > 0) {
-      console.log("Column s3_key already exists in product_images table")
-      return
+      console.log("Column s3_key already exists in product_images table");
+      return;
     }
-
+    
     // Add the s3_key column
     await query(`
       ALTER TABLE product_images 
       ADD COLUMN s3_key VARCHAR(255)
-    `)
-
-    console.log("Successfully added s3_key column to product_images table")
-
+    `);
+    
+    console.log("Successfully added s3_key column to product_images table");
+    
     // Create an index on s3_key for faster lookups
     await query(`
       CREATE INDEX idx_product_images_s3_key ON product_images(s3_key)
-    `)
-
-    console.log("Successfully created index on s3_key column")
-
-    console.log("Migration completed successfully")
+    `);
+    
+    console.log("Successfully created index on s3_key column");
+    console.log("Migration completed successfully");
   } catch (error) {
-    console.error("Error in migration:", error)
-    throw error
+    console.error("Error in migration:", error);
+    throw error;
   }
 }
 
@@ -355,11 +362,11 @@ export async function addS3KeyToProductImages() {
 if (require.main === module) {
   addS3KeyToProductImages()
     .then(() => {
-      console.log("Migration completed successfully")
-      process.exit(0)
+      console.log("Migration completed successfully");
+      process.exit(0);
     })
     .catch((error) => {
-      console.error("Migration failed:", error)
-      process.exit(1)
-    })
+      console.error("Migration failed:", error);
+      process.exit(1);
+    });
 }

@@ -17,47 +17,42 @@ pool.on('error', (err) => {
   console.error('Unexpected error on idle client', err);
 });
 
-// Function to safely execute SQL queries with prepared statements
-export const query = async (text: string, params?: any[]) => {
+export const query = async (text: string, params?: any[], clientOverride?: PoolClient) => {
   const start = Date.now();
   let client: PoolClient | null = null;
-  
+  const shouldRelease = !clientOverride;
+
   try {
-    // Get client from pool instead of using pool.query directly
-    client = await pool.connect();
-    
-    // Set statement timeout at the session level
-    await client.query('SET statement_timeout = 100000');
-    
-    // Use parameterized queries to prevent SQL injection
+    client = clientOverride || await pool.connect();
+
+    if (!clientOverride) {
+      await client.query('SET statement_timeout = 100000');
+    }
+
     const res = await client.query(text, params);
-    
     const duration = Date.now() - start;
-    
-    // Only log minimal information in production
+
     if (process.env.NODE_ENV !== "production") {
       console.log("Executed query", {
         text: text.substring(0, 80) + (text.length > 80 ? '...' : ''),
         duration,
-        rows: res.rowCount
+        rows: res.rowCount,
       });
     }
-    
+
     return res;
   } catch (error) {
-    // Don't expose query text in production logs
-    if (process.env.NODE_ENV === "production") {
-      console.error("Error executing query", { error });
-    } else {
+    if (process.env.NODE_ENV !== "production") {
       console.error("Error executing query", {
         text: text.substring(0, 80) + (text.length > 80 ? '...' : ''),
-        error
+        error,
       });
+    } else {
+      console.error("Error executing query", { error });
     }
     throw error;
   } finally {
-    // Always release the client back to the pool
-    if (client) client.release();
+    if (shouldRelease && client) client.release();
   }
 };
 

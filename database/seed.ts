@@ -3061,7 +3061,7 @@ const seedProducts = async () => {
       // Check if product already exists
       const existingProduct = await query(
         "SELECT * FROM products WHERE name = $1",
-        [product.name]
+        [product.name], client
       );
 
       if (existingProduct.rows.length === 0) {
@@ -3076,7 +3076,7 @@ const seedProducts = async () => {
             product.price,
             categoryId,
             product.stock_quantity,
-          ]
+          ], client
         );
 
         const productId = productResult.rows[0].id;
@@ -3088,7 +3088,7 @@ const seedProducts = async () => {
           );
           await query(
             "INSERT INTO product_sizes (product_id, size, stock_quantity) VALUES ($1, $2, $3)",
-            [productId, size, sizeStockQuantity]
+            [productId, size, sizeStockQuantity], client
           );
         }
 
@@ -3104,7 +3104,7 @@ const seedProducts = async () => {
               image.width,
               image.height,
               image.alt_text,
-            ]
+            ], client
           );
         }
       }
@@ -3139,7 +3139,7 @@ const seedTestUsers = async () => {
     return await executeTransaction(async (client) => {
     for (const user of testUsers) {
       const existingUser = await query("SELECT * FROM users WHERE email = $1", [
-        user.email,
+        user.email, client
       ]);
 
       if (existingUser.rows.length === 0) {
@@ -3147,17 +3147,17 @@ const seedTestUsers = async () => {
 
         await query(
           "INSERT INTO users (email, password, first_name, last_name) VALUES ($1, $2, $3, $4)",
-          [user.email, hashedPassword, user.first_name, user.last_name]
+          [user.email, hashedPassword, user.first_name, user.last_name], client
         );
 
         // Create a cart for the user
         const userResult = await query(
           "SELECT id FROM users WHERE email = $1",
-          [user.email]
+          [user.email], client
         );
         const userId = userResult.rows[0].id;
 
-        await query("INSERT INTO carts (user_id) VALUES ($1)", [userId]);
+        await query("INSERT INTO carts (user_id) VALUES ($1)", [userId], client);
       }
     }
 
