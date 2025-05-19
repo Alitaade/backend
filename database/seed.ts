@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
-import { query, checkConnection, executeTransaction } from "./connection";
-import { initializeSchema, verifyTables } from "./schema";
+import { query } from "./connection";
+import { initializeSchema } from "./schema";
 
 // Function to seed admin user
 const seedAdminUser = async () => {
@@ -3055,8 +3055,7 @@ const seedProducts = async () => {
   ],
 },
     ];
-    // Use a transaction for all product insertions
-    return await executeTransaction(async (client) => {
+
     for (const product of products) {
       // Check if product already exists
       const existingProduct = await query(
@@ -3111,13 +3110,10 @@ const seedProducts = async () => {
     }
 
     console.log("Products seeded successfully");
-    return true;
-  }); // <--- This is the closing bracket for executeTransaction function
   } catch (error) {
     console.error("Error seeding products:", error);
   }
-}
-
+};
 
 // Function to seed test users
 const seedTestUsers = async () => {
@@ -3136,7 +3132,7 @@ const seedTestUsers = async () => {
         last_name: "Smith",
       },
     ];
-    return await executeTransaction(async (client) => {
+
     for (const user of testUsers) {
       const existingUser = await query("SELECT * FROM users WHERE email = $1", [
         user.email,
@@ -3162,8 +3158,6 @@ const seedTestUsers = async () => {
     }
 
     console.log("Test users seeded successfully");
-    return true;
-  });
   } catch (error) {
     console.error("Error seeding test users:", error);
   }
@@ -3224,80 +3218,28 @@ const seedTestOrders = async () => {
     console.error("Error seeding test orders:", error);
   }
 };
+
 // Main seed function
 const seedDatabase = async () => {
   try {
     console.log("Starting database seeding...");
 
-    // First check if database connection is working
-    console.log("Checking database connection...");
-    const isConnected = await checkConnection();
-    if (!isConnected) {
-      throw new Error("Database connection failed. Cannot proceed with seeding.");
-    }
-    console.log("Database connection established.");
-
     // Initialize schema first and wait for it to complete
     console.log("Creating database schema...");
     const schemaInitialized = await initializeSchema();
+
     if (!schemaInitialized) {
       throw new Error("Failed to initialize database schema");
     }
+
     console.log("Database schema created successfully");
 
-    // Verify that tables exist before proceeding
-    console.log("Verifying database tables...");
-    const tablesVerified = await verifyTables();
-    if (!tablesVerified) {
-      throw new Error("Table verification failed. Tables may not have been created properly.");
-    }
-    console.log("All tables verified successfully.");
-
-    // Now proceed with seeding data - using sequential execution with try/catch for each step
-    try {
-      console.log("Seeding admin user...");
-      await seedAdminUser();
-      console.log("Admin user created successfully");
-    } catch (error) {
-      console.error("Error seeding admin user:", error);
-      throw error;
-    }
-
-    try {
-      console.log("Seeding categories...");
-      await seedCategories();
-      console.log("Categories seeded successfully");
-    } catch (error) {
-      console.error("Error seeding categories:", error);
-      throw error;
-    }
-
-    try {
-      console.log("Seeding products...");
-      await seedProducts();
-      console.log("Products seeded successfully");
-    } catch (error) {
-      console.error("Error seeding products:", error);
-      throw error;
-    }
-
-    try {
-      console.log("Seeding test users...");
-      await seedTestUsers();
-      console.log("Test users seeded successfully");
-    } catch (error) {
-      console.error("Error seeding test users:", error);
-      throw error;
-    }
-
-    try {
-      console.log("Seeding test orders...");
-      await seedTestOrders();
-      console.log("Test orders seeded successfully");
-    } catch (error) {
-      console.error("Error seeding test orders:", error);
-      throw error;
-    }
+    // Now proceed with seeding data
+    await seedAdminUser();
+    await seedCategories();
+    await seedProducts();
+    await seedTestUsers();
+    await seedTestOrders();
 
     console.log("Database seeding completed successfully");
     process.exit(0);

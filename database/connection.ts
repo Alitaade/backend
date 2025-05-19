@@ -7,9 +7,10 @@ const pool = new Pool({
     process.env.NODE_ENV === "production"
       ? { rejectUnauthorized: true }
       : false,
-  max: 90, // Reduced from 200 to a more reasonable value
-  idleTimeoutMillis: 30000, // 30 seconds idle timeout
-  connectionTimeoutMillis: 5000, // 5 seconds connection timeout
+  max: 90, // Reduced from 50 to avoid connection overload
+  idleTimeoutMillis: 30000, // Reduced to 30 seconds
+  connectionTimeoutMillis: 90000, // 5 seconds connection timeout
+  // statement_timeout removed from here - will be set at session level
 });
 
 // Add event listeners for connection issues
@@ -27,7 +28,7 @@ export const query = async (text: string, params?: any[]) => {
     client = await pool.connect();
     
     // Set statement timeout at the session level
-    await client.query('SET statement_timeout = 100000');
+    await client.query('SET statement_timeout = 90000');
     
     // Use parameterized queries to prevent SQL injection
     const res = await client.query(text, params);
@@ -36,10 +37,10 @@ export const query = async (text: string, params?: any[]) => {
     
     // Only log minimal information in production
     if (process.env.NODE_ENV !== "production") {
-      console.log("Executed query", {
-        text: text.substring(0, 80) + (text.length > 80 ? '...' : ''),
-        duration,
-        rows: res.rowCount
+      console.log("Executed query", { 
+        text: text.substring(0, 800) + (text.length > 800 ? '...' : ''),
+        duration, 
+        rows: res.rowCount 
       });
     }
     
@@ -49,33 +50,15 @@ export const query = async (text: string, params?: any[]) => {
     if (process.env.NODE_ENV === "production") {
       console.error("Error executing query", { error });
     } else {
-      console.error("Error executing query", {
-        text: text.substring(0, 80) + (text.length > 80 ? '...' : ''),
-        error
+      console.error("Error executing query", { 
+        text: text.substring(0, 800) + (text.length > 800 ? '...' : ''), 
+        error 
       });
     }
     throw error;
   } finally {
     // Always release the client back to the pool
     if (client) client.release();
-  }
-};
-
-// Function to execute a transaction
-export const executeTransaction = async (callback: (client: PoolClient) => Promise<any>) => {
-  const client = await pool.connect();
-  
-  try {
-    await client.query('BEGIN');
-    const result = await callback(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Transaction error:', error);
-    throw error;
-  } finally {
-    client.release();
   }
 };
 

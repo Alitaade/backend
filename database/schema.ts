@@ -1,12 +1,10 @@
-import { query, executeTransaction } from "./connection";
+import { query } from "./connection";
 
 // Function to create all necessary tables
 export const createTables = async () => {
   try {
-    // Use a transaction to ensure all tables are created or none
-    return await executeTransaction(async (client) => {
       // Create users table with new fields
-      await client.query(`
+      await query(`
         CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
           email VARCHAR(255) UNIQUE NOT NULL,
@@ -26,7 +24,7 @@ export const createTables = async () => {
       `);
 
       // Create product categories table
-      await client.query(`
+      await query(`
         CREATE TABLE IF NOT EXISTS categories (
           id SERIAL PRIMARY KEY,
           name VARCHAR(100) NOT NULL,
@@ -37,7 +35,7 @@ export const createTables = async () => {
       `);
 
       // Create products table
-      await client.query(`
+      await query(`
         CREATE TABLE IF NOT EXISTS products (
           id SERIAL PRIMARY KEY,
           name VARCHAR(255) NOT NULL,
@@ -51,7 +49,7 @@ export const createTables = async () => {
       `);
 
       // Create product images table with s3_key column included
-      await client.query(`
+      await query(`
         CREATE TABLE IF NOT EXISTS product_images (
           id SERIAL PRIMARY KEY,
           product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
@@ -66,12 +64,12 @@ export const createTables = async () => {
       `);
 
       // Create index on s3_key for product_images
-      await client.query(`
+      await query(`
         CREATE INDEX IF NOT EXISTS idx_product_images_s3_key ON product_images(s3_key)
       `);
 
       // Create product sizes table
-      await client.query(`
+      await query(`
         CREATE TABLE IF NOT EXISTS product_sizes (
           id SERIAL PRIMARY KEY,
           product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
@@ -82,7 +80,7 @@ export const createTables = async () => {
       `);
 
       // Create carts table
-      await client.query(`
+      await query(`
         CREATE TABLE IF NOT EXISTS carts (
           id SERIAL PRIMARY KEY,
           user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -92,7 +90,7 @@ export const createTables = async () => {
       `);
 
       // Create cart items table
-      await client.query(`
+      await query(`
         CREATE TABLE IF NOT EXISTS cart_items (
           id SERIAL PRIMARY KEY,
           cart_id INTEGER REFERENCES carts(id) ON DELETE CASCADE,
@@ -105,7 +103,7 @@ export const createTables = async () => {
       `);
 
       // Create transactions table (unified syntax)
-      await client.query(`
+      await query(`
         CREATE TABLE IF NOT EXISTS transactions (
           id SERIAL PRIMARY KEY,
           user_id INTEGER REFERENCES users(id),
@@ -119,7 +117,7 @@ export const createTables = async () => {
       `);
 
       // Create orders table (unified structure and syntax with currency fields)
-      await client.query(`
+      await query(`
         CREATE TABLE IF NOT EXISTS orders (
           id SERIAL PRIMARY KEY,
           order_number VARCHAR(50) UNIQUE NOT NULL,
@@ -140,7 +138,7 @@ export const createTables = async () => {
       `);
 
       // Create order items table (unified syntax with product_name column added)
-      await client.query(`
+      await query(`
         CREATE TABLE IF NOT EXISTS order_items (
           id SERIAL PRIMARY KEY,
           order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
@@ -155,7 +153,7 @@ export const createTables = async () => {
       `);
 
       // Create payment verification tokens table
-      await client.query(`
+      await query(`
         CREATE TABLE IF NOT EXISTS payment_verification_tokens (
           id SERIAL PRIMARY KEY,
           order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
@@ -169,13 +167,13 @@ export const createTables = async () => {
       `);
 
       // Add indexes for faster lookups on payment verification tokens
-      await client.query(`
+      await query(`
         CREATE INDEX IF NOT EXISTS idx_payment_verification_tokens_order_number ON payment_verification_tokens(order_number);
         CREATE INDEX IF NOT EXISTS idx_payment_verification_tokens_token ON payment_verification_tokens(token);
       `);
 
       // Create verification_codes table
-      await client.query(`
+      await query(`
         CREATE TABLE IF NOT EXISTS verification_codes (
           id SERIAL PRIMARY KEY,
           user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -190,14 +188,14 @@ export const createTables = async () => {
       `);
 
       // Create indexes for faster lookups on verification codes
-      await client.query(`
+      await query(`
         CREATE INDEX IF NOT EXISTS idx_verification_codes_user_id ON verification_codes(user_id);
         CREATE INDEX IF NOT EXISTS idx_verification_codes_code ON verification_codes(code);
         CREATE INDEX IF NOT EXISTS idx_verification_codes_type ON verification_codes(type);
       `);
 
       // Create password_reset_tokens table for link-based resets
-      await client.query(`
+      await query(`
         CREATE TABLE IF NOT EXISTS password_reset_tokens (
           id SERIAL PRIMARY KEY,
           user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -209,41 +207,38 @@ export const createTables = async () => {
       `);
 
       // Create indexes for faster lookups on password reset tokens
-      await client.query(`
+      await query(`
         CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token);
         CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
       `);
+    
       console.log("All tables created successfully");
       return true;
-    });
-  } catch (error) {
-    console.error("Error creating tables:", error);
-    return false;
-  }
-};
-
+    } catch (error) {
+      console.error("Error creating tables:", error);
+      return false;
+    }
+  };
+  
 // Function to drop all tables (useful for development)
 export const dropTables = async () => {
   try {
-    // Use a transaction to ensure all tables are dropped or none
-    return await executeTransaction(async (client) => {
-      await client.query("DROP TABLE IF EXISTS password_reset_tokens CASCADE");
-      await client.query("DROP TABLE IF EXISTS verification_codes CASCADE");
-      await client.query("DROP TABLE IF EXISTS payment_verification_tokens CASCADE");
-      await client.query("DROP TABLE IF EXISTS order_items CASCADE");
-      await client.query("DROP TABLE IF EXISTS orders CASCADE");
-      await client.query("DROP TABLE IF EXISTS transactions CASCADE");
-      await client.query("DROP TABLE IF EXISTS cart_items CASCADE");
-      await client.query("DROP TABLE IF EXISTS carts CASCADE");
-      await client.query("DROP TABLE IF EXISTS product_sizes CASCADE");
-      await client.query("DROP TABLE IF EXISTS product_images CASCADE");
-      await client.query("DROP TABLE IF EXISTS products CASCADE");
-      await client.query("DROP TABLE IF EXISTS categories CASCADE");
-      await client.query("DROP TABLE IF EXISTS users CASCADE");
+    await query("DROP TABLE IF EXISTS password_reset_tokens CASCADE");
+    await query("DROP TABLE IF EXISTS verification_codes CASCADE");
+    await query("DROP TABLE IF EXISTS payment_verification_tokens CASCADE");
+    await query("DROP TABLE IF EXISTS order_items CASCADE");
+    await query("DROP TABLE IF EXISTS orders CASCADE");
+    await query("DROP TABLE IF EXISTS transactions CASCADE");
+    await query("DROP TABLE IF EXISTS cart_items CASCADE");
+    await query("DROP TABLE IF EXISTS carts CASCADE");
+    await query("DROP TABLE IF EXISTS product_sizes CASCADE");
+    await query("DROP TABLE IF EXISTS product_images CASCADE");
+    await query("DROP TABLE IF EXISTS products CASCADE");
+    await query("DROP TABLE IF EXISTS categories CASCADE");
+    await query("DROP TABLE IF EXISTS users CASCADE");
 
-      console.log("All tables dropped successfully");
-      return true;
-    });
+    console.log("All tables dropped successfully");
+    return true;
   } catch (error) {
     console.error("Error dropping tables:", error);
     return false;
@@ -258,9 +253,7 @@ export const initializeSchema = async () => {
     
     // Create the tables
     await createTables();
-    
-    // Verify that the tables were created
-    await verifyTables();
+
     
     return true;
   } catch (error) {
@@ -268,104 +261,3 @@ export const initializeSchema = async () => {
     return false;
   }
 };
-
-// Function to verify that tables were created properly
-export const verifyTables = async () => {
-  const tableNames = [
-    "users",
-    "categories",
-    "products",
-    "product_images",
-    "product_sizes",
-    "carts",
-    "cart_items",
-    "transactions",
-    "orders",
-    "order_items",
-    "payment_verification_tokens",
-    "verification_codes",
-    "password_reset_tokens"
-  ];
-  
-  try {
-    for (const tableName of tableNames) {
-      const res = await query(
-        `SELECT EXISTS (
-           SELECT FROM information_schema.tables 
-           WHERE table_schema = 'public'
-           AND table_name = $1
-         )`,
-        [tableName]
-      );
-      
-      const exists = res.rows[0].exists;
-      if (!exists) {
-        console.error(`Table ${tableName} does not exist after schema initialization`);
-        return false;
-      }
-    }
-    
-    console.log("All tables verified successfully");
-    return true;
-  } catch (error) {
-    console.error("Error verifying tables:", error);
-    return false;
-  }
-};
-
-/**
- * Migration to add s3_key column to product_images table (for existing databases)
- * Note: This is only needed for updating existing databases, as new databases
- * will already have this column from the createTables function
- */
-export async function addS3KeyToProductImages() {
-  try {
-    console.log("Starting migration: Add s3_key to product_images table");
-    
-    // Check if the column already exists
-    const checkColumnQuery = `
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'product_images' AND column_name = 's3_key'
-    `;
-    
-    const columnCheck = await query(checkColumnQuery);
-    
-    if (columnCheck.rows.length > 0) {
-      console.log("Column s3_key already exists in product_images table");
-      return;
-    }
-    
-    // Add the s3_key column
-    await query(`
-      ALTER TABLE product_images 
-      ADD COLUMN s3_key VARCHAR(255)
-    `);
-    
-    console.log("Successfully added s3_key column to product_images table");
-    
-    // Create an index on s3_key for faster lookups
-    await query(`
-      CREATE INDEX idx_product_images_s3_key ON product_images(s3_key)
-    `);
-    
-    console.log("Successfully created index on s3_key column");
-    console.log("Migration completed successfully");
-  } catch (error) {
-    console.error("Error in migration:", error);
-    throw error;
-  }
-}
-
-// Run the migration if this file is executed directly
-if (require.main === module) {
-  addS3KeyToProductImages()
-    .then(() => {
-      console.log("Migration completed successfully");
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error("Migration failed:", error);
-      process.exit(1);
-    });
-}
