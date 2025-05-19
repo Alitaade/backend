@@ -3219,60 +3219,28 @@ const seedTestOrders = async () => {
   }
 };
 
-// Helper function to check if a table exists
-const checkTableExists = async (tableName: string): Promise<boolean> => {
-  try {
-    const result = await query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = $1
-      )
-    `, [tableName]);
-    
-    return result.rows[0].exists;
-  } catch (error) {
-    console.error(`Error checking if table ${tableName} exists:`, error);
-    return false;
-  }
-};
-
 // Main seed function
 const seedDatabase = async () => {
   try {
     console.log("Starting database seeding...");
-    
+
     // Initialize schema first and wait for it to complete
     console.log("Creating database schema...");
     const schemaInitialized = await initializeSchema();
-    
+
     if (!schemaInitialized) {
       throw new Error("Failed to initialize database schema");
     }
-    
+
     console.log("Database schema created successfully");
-    
-    // Now proceed with seeding data in correct order
+
+    // Now proceed with seeding data
     await seedAdminUser();
     await seedCategories();
-    
-    // Add verification for tables before continuing
-    const productSizesExist = await checkTableExists("product_sizes");
-    const cartsExist = await checkTableExists("carts");
-    
-    if (!productSizesExist) {
-      console.error("product_sizes table doesn't exist! Aborting product seeding.");
-      throw new Error("product_sizes table doesn't exist");
-    }
-    
-    if (!cartsExist) {
-      console.error("carts table doesn't exist! Aborting test user seeding.");
-      throw new Error("carts table doesn't exist");
-    }
-    
     await seedProducts();
+    await seedTestUsers();
     await seedTestOrders();
-    
+
     console.log("Database seeding completed successfully");
     process.exit(0);
   } catch (error) {
@@ -3280,5 +3248,6 @@ const seedDatabase = async () => {
     process.exit(1);
   }
 };
+
 // Run the seed function
 seedDatabase();

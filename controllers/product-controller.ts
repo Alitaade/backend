@@ -587,14 +587,17 @@ export const handleOctetStreamUpload = async (req: NextApiRequest, res: NextApiR
       altText: altText,
     })
 
-    // Add the image to product with S3 key
+    console.log(`File uploaded to S3 with key ${key} and URL ${url}`)
+
+    // Add the image to product with S3 URL and key
     const image = await addProductImage(
       productId,
-      url, // Use the S3 URL
+      url, // Use the signed S3 URL
       isPrimary,
       undefined,
       undefined,
       altText,
+      key, // Store the S3 key for future reference
     )
 
     console.log(`Successfully added image ID ${image.id} to product ${productId}`)

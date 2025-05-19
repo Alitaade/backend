@@ -674,64 +674,39 @@ export const updateProduct = async (
  * @returns Created image
  */
 export const addProductImage = async (
-  product_id: number,
-  image_url: string,
-  is_primary = false,
+  productId: number,
+  imageUrl: string,
+  isPrimary = false,
   width?: number,
   height?: number,
-  alt_text?: string,
-): Promise<ProductImage> => {
+  altText?: string,
+  s3Key?: string,
+): Promise<any> => {
   try {
-    // If this is a primary image, update all other images to non-primary
-    if (is_primary) {
-      await query("UPDATE product_images SET is_primary = false WHERE product_id = $1", [product_id])
+    // Validate the product exists
+    const product = await getProductById(productId)
+    if (!product) {
+      throw new Error(`Product with ID ${productId} not found`)
     }
 
-    // Check if the image is a base64 string
-    if (image_url.startsWith("data:")) {
-      try {
-        // Upload to S3 instead of storing base64 in database
-        const { key, url } = await uploadBase64(image_url, `product_${product_id}_image`, {
-          productId: product_id.toString(),
-          altText: alt_text || "",
-        })
-
-        // Store the S3 key and URL in the database
-        const result = await query(
-          "INSERT INTO product_images (product_id, image_url, s3_key, is_primary, width, height, alt_text) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
-          [
-            product_id,
-            url, // Store the URL for backward compatibility
-            key, // Store the S3 key for future reference
-            is_primary,
-            width || null,
-            height || null,
-            alt_text || null,
-          ],
-        )
-
-        return result.rows[0]
-      } catch (error) {
-        console.error("Error uploading image to S3:", error)
-        // Fall back to storing base64 in database if S3 upload fails
-        const result = await query(
-          "INSERT INTO product_images (product_id, image_url, is_primary, width, height, alt_text) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
-          [product_id, image_url, is_primary, width || null, height || null, alt_text || null],
-        )
-
-        return result.rows[0]
-      }
-    } else {
-      // For non-base64 URLs, just store the URL
-      const result = await query(
-        "INSERT INTO product_images (product_id, image_url, is_primary, width, height, alt_text) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
-        [product_id, image_url, is_primary, width || null, height || null, alt_text || null],
-      )
-
-      return result.rows[0]
+    // If this is the first image or marked as primary, set all other images as non-primary
+    if (isPrimary) {
+      await query(`UPDATE product_images SET is_primary = false WHERE product_id = $1`, [productId])
     }
+
+    // Insert the new image
+    const result = await query(
+      `INSERT INTO product_images (product_id, image_url, is_primary, width, height, alt_text, s3_key) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [productId, imageUrl, isPrimary, width || null, height || null, altText || null, s3Key || null],
+    )
+
+    // Get the inserted image
+    const imagesResult = await query(`SELECT * FROM product_images WHERE id = $1`, [result.rows[0].id])
+
+    return imagesResult.rows[0]
   } catch (error) {
-    console.error("Error adding product image:", error)
+    console.error(`Error adding image to product ${productId}:`, error)
     throw error
   }
 }
