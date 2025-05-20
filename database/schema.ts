@@ -263,10 +263,10 @@ export const dropTables = async () => {
   }
 };
 // Improved initialize schema function that doesn't drop tables in production
-export const initializeSchema = async (forceReset = false) => {
+export const initializeSchema = async (forceReset = true) => {
   try {
     // Check if we're running in a development environment
-    const isDevelopment = process.env.NODE_ENV === 'development';
+    const isDevelopment = process.env.NODE_ENV === 'production';
     
     // Check if tables already exist
     const tablesExist = await checkTablesExist();
