@@ -79,16 +79,15 @@ export const createTables = async () => {
       )
     `);
 
-    // Create carts table - fixed indentation from original
-    await query(`
-      CREATE TABLE IF NOT EXISTS carts (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
+       // Create carts table
+       await query(`
+        CREATE TABLE IF NOT EXISTS carts (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
     // Create cart items table
     await query(`
       CREATE TABLE IF NOT EXISTS cart_items (
@@ -116,7 +115,7 @@ export const createTables = async () => {
       )
     `);
 
-    // Create orders table with currency fields
+    // Create orders table (unified structure and syntax with currency fields)
     await query(`
       CREATE TABLE IF NOT EXISTS orders (
         id SERIAL PRIMARY KEY,
@@ -137,7 +136,7 @@ export const createTables = async () => {
       )
     `);
 
-    // Create order items table with product_name column
+    // Create order items table (unified syntax with product_name column added)
     await query(`
       CREATE TABLE IF NOT EXISTS order_items (
         id SERIAL PRIMARY KEY,
@@ -152,8 +151,8 @@ export const createTables = async () => {
       )
     `);
 
-    // Create payment verification tokens table
-    await query(`
+     // Create payment verification tokens table
+     await query(`
       CREATE TABLE IF NOT EXISTS payment_verification_tokens (
         id SERIAL PRIMARY KEY,
         order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
@@ -161,11 +160,10 @@ export const createTables = async () => {
         token VARCHAR(255) NOT NULL,
         expires_at TIMESTAMP NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        used BOOLEAN DEFAULT FALSE,
-        usage_count INTEGER DEFAULT 0
+        used BOOLEAN DEFAULT FALSE
       )
     `);
-
+   
     // Add indexes for faster lookups on payment verification tokens
     await query(`
       CREATE INDEX IF NOT EXISTS idx_payment_verification_tokens_order_number ON payment_verification_tokens(order_number);
