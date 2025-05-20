@@ -263,11 +263,7 @@ export const getAllProductsWithoutPagination = async (
  * @param category_id Optional category filter
  * @returns Array of products with details
  */
-export const getAllProducts = async (
-  limit = 500,
-  offset = 0,
-  category_id?: number
-): Promise<ProductWithDetails[]> => {
+export const getAllProducts = async (limit = 50, offset = 0, category_id?: number): Promise<ProductWithDetails[]> => {
   try {
     let queryText = `
       SELECT p.*, c.name as category_name
@@ -372,6 +368,7 @@ export const getProductById = async (id: number): Promise<ProductWithDetails | n
     console.error("Error getting product by ID:", error)
     throw error
   }
+}
   
 /**
  * Create a new product with optional sizes and images

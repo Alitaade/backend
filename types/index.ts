@@ -31,12 +31,8 @@ export interface Product {
   price: number
   category_id: number | null
   stock_quantity: number
-  created_at: string | Date
-  updated_at: string | Date
-  category?: Category
-  images?: ProductImage[]
-  sizes?: ProductSize[]
-  category_name?: string
+  created_at: Date
+  updated_at: Date
 }
 
 export interface ProductImage {
@@ -44,8 +40,8 @@ export interface ProductImage {
   product_id: number
   image_url: string
   is_primary: boolean
-  width: number | null
-  height: number | null
+  width?: number | null
+  height?: number | null
   alt_text: string | null
   created_at: string | Date
 }
