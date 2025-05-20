@@ -98,13 +98,15 @@ export const createTables = async () => {
       )
     `);
 
-    // Create carts table
+    // Create carts table with NULL option for guest carts
     await query(`
       CREATE TABLE IF NOT EXISTS carts (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE NULL,
+        session_id VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT check_cart_owner CHECK (user_id IS NOT NULL OR session_id IS NOT NULL)
       )
     `);
     
@@ -125,7 +127,7 @@ export const createTables = async () => {
     await query(`
       CREATE TABLE IF NOT EXISTS transactions (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id),
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL NULL,
         reference VARCHAR(255) NOT NULL,
         amount DECIMAL(10, 2) NOT NULL,
         status VARCHAR(50) DEFAULT 'pending',
@@ -140,7 +142,9 @@ export const createTables = async () => {
       CREATE TABLE IF NOT EXISTS orders (
         id SERIAL PRIMARY KEY,
         order_number VARCHAR(50) UNIQUE NOT NULL,
-        user_id INTEGER REFERENCES users(id),
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL NULL,
+        session_id VARCHAR(255),
+        customer_email VARCHAR(255) NOT NULL,
         total_amount DECIMAL(10, 2) NOT NULL,
         currency_code VARCHAR(10) DEFAULT 'USD',
         currency_rate DECIMAL(10, 6) DEFAULT 1,
@@ -152,7 +156,8 @@ export const createTables = async () => {
         payment_status VARCHAR(50),
         payment_date TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT check_order_identification CHECK (user_id IS NOT NULL OR session_id IS NOT NULL)
       )
     `);
 
@@ -161,7 +166,7 @@ export const createTables = async () => {
       CREATE TABLE IF NOT EXISTS order_items (
         id SERIAL PRIMARY KEY,
         order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
-        product_id INTEGER REFERENCES products(id),
+        product_id INTEGER REFERENCES products(id) ON DELETE SET NULL NULL,
         product_name VARCHAR(255) NOT NULL,
         quantity INTEGER NOT NULL,
         price DECIMAL(10, 2) NOT NULL,
@@ -262,11 +267,12 @@ export const dropTables = async () => {
     return false;
   }
 };
+
 // Improved initialize schema function that doesn't drop tables in production
-export const initializeSchema = async (forceReset = true) => {
+export const initializeSchema = async (forceReset = false) => {
   try {
     // Check if we're running in a development environment
-    const isDevelopment = process.env.NODE_ENV === 'production';
+    const isDevelopment = process.env.NODE_ENV !== 'production';
     
     // Check if tables already exist
     const tablesExist = await checkTablesExist();
