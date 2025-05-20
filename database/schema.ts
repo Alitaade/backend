@@ -1,5 +1,24 @@
 import { query } from "./connection";
 
+// Function to check if tables exist
+export const checkTablesExist = async () => {
+  try {
+    // Check if the users table exists (as a sample check)
+    const result = await query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'users'
+      );
+    `);
+    
+    return result.rows[0].exists;
+  } catch (error) {
+    console.error("Error checking if tables exist:", error);
+    return false;
+  }
+};
+
 // Function to create all necessary tables
 export const createTables = async () => {
   try {
@@ -79,15 +98,16 @@ export const createTables = async () => {
       )
     `);
 
-       // Create carts table
-       await query(`
-        CREATE TABLE IF NOT EXISTS carts (
-          id SERIAL PRIMARY KEY,
-          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
+    // Create carts table
+    await query(`
+      CREATE TABLE IF NOT EXISTS carts (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
     // Create cart items table
     await query(`
       CREATE TABLE IF NOT EXISTS cart_items (
@@ -151,8 +171,8 @@ export const createTables = async () => {
       )
     `);
 
-     // Create payment verification tokens table
-     await query(`
+    // Create payment verification tokens table
+    await query(`
       CREATE TABLE IF NOT EXISTS payment_verification_tokens (
         id SERIAL PRIMARY KEY,
         order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
@@ -242,21 +262,37 @@ export const dropTables = async () => {
     return false;
   }
 };
-
-// Initialize database schema with improved error handling
-export const initializeSchema = async () => {
+// Improved initialize schema function that doesn't drop tables in production
+export const initializeSchema = async (forceReset = false) => {
   try {
-    // Drop the tables first
-    await dropTables();
+    // Check if we're running in a development environment
+    const isDevelopment = process.env.NODE_ENV === 'development';
     
-    // Create the tables
-    const created = await createTables();
+    // Check if tables already exist
+    const tablesExist = await checkTablesExist();
     
-    if (!created) {
-      console.error("Failed to create tables");
-      return false;
+    // Only drop tables if:
+    // 1. We're in development mode AND
+    // 2. We're explicitly asked to reset OR tables don't exist
+    if ((isDevelopment && forceReset) || !tablesExist) {
+      if (forceReset) {
+        console.log("Force resetting database schema...");
+        await dropTables();
+      }
+      
+      // Create the tables
+      const created = await createTables();
+      
+      if (!created) {
+        console.error("Failed to create tables");
+        return false;
+      }
+      
+      console.log("Database schema initialized successfully");
+      return true;
     }
     
+    console.log("Database tables already exist, skipping initialization");
     return true;
   } catch (error) {
     console.error("Error initializing schema:", error);
