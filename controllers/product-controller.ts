@@ -202,20 +202,9 @@ export const getProductTotalStock = async (req: NextApiRequest, res: NextApiResp
   }
 }
 
-// Keep other functions as they are...
 export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
-    const { limit = "10", offset = "0", category_id, sort = "id", order = "asc", page = "1", all = "" } = req.query
-
-    console.log("Processing product request with params:", {
-      limit,
-      offset,
-      category_id,
-      sort,
-      order,
-      page,
-      all,
-    })
+    const { limit, offset, category_id, sort = "id", order = "asc", page = "1", all = "" } = req.query
 
     // If the "all" parameter is provided, get all products without pagination
     if (all === "true") {
@@ -236,39 +225,15 @@ export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => 
       })
     }
 
-    // Calculate offset based on page if provided
-    const pageNum = Number.parseInt(page as string, 10)
-    const limitNum = Number.parseInt(limit as string, 10)
-    const calculatedOffset = pageNum > 1 ? (pageNum - 1) * limitNum : Number.parseInt(offset as string, 10)
-
-    console.log("Calculated pagination values:", {
-      pageNum,
-      limitNum,
-      calculatedOffset,
-    })
-
-    // Get total count first for pagination
-    const totalCount = await countProducts(category_id ? Number.parseInt(category_id as string) : undefined)
-    const totalPages = Math.ceil(totalCount / limitNum)
-
-    // Get paginated products
     const products = await getAllProducts(
-      limitNum,
-      calculatedOffset,
+      limit ? Number.parseInt(limit as string) : undefined,
+      offset ? Number.parseInt(offset as string) : undefined,
       category_id ? Number.parseInt(category_id as string) : undefined,
-      sort as string,
-      order as string,
     )
+    
+    console.log(`Returning ${products.length} products`)
 
-    console.log(`Returning ${products.length} products (page ${pageNum} of ${totalPages}), total: ${totalCount}`)
-
-    return res.status(200).json({
-      products,
-      page: pageNum,
-      limit: limitNum,
-      total: totalCount,
-      totalPages,
-    })
+    return res.status(200).json({ products })
   } catch (error) {
     console.error("Error getting products:", error)
     return res.status(500).json({ error: "Internal server error" })
