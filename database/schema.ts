@@ -126,7 +126,6 @@ export const createTables = async () => {
         order_number VARCHAR(50) UNIQUE NOT NULL,
         user_id INTEGER REFERENCES users(id) ON DELETE SET NULL NULL,
         session_id VARCHAR(255),
-        customer_email VARCHAR(255) NOT NULL,
         total_amount DECIMAL(10, 2) NOT NULL,
         currency_code VARCHAR(10) DEFAULT 'USD',
         currency_rate DECIMAL(10, 6) DEFAULT 1,
