@@ -175,6 +175,10 @@ export const createTables = async () => {
       CREATE INDEX IF NOT EXISTS idx_payment_verification_tokens_order_number ON payment_verification_tokens(order_number);
       CREATE INDEX IF NOT EXISTS idx_payment_verification_tokens_token ON payment_verification_tokens(token);
     `);
+        // Add usage_count column to payment_verification_tokens table if it doesn't exist
+        await query(`
+          ALTER TABLE payment_verification_tokens ADD COLUMN IF NOT EXISTS usage_count INTEGER DEFAULT 0;
+        `);
 
     // Create verification_codes table
     await query(`
