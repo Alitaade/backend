@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 import { query } from "./connection";
-import { initializeSchema, checkTablesExist } from "./schema";
+import { initializeSchema } from "./schema";
 
 // Function to seed admin user
 const seedAdminUser = async () => {
@@ -3222,16 +3222,10 @@ const seedTestOrders = async () => {
 // Main seed function
 const seedDatabase = async () => {
   try {
-    console.log("Starting database seeding...");
-    const tablesExist = await checkTablesExist();
-    
-    if (!tablesExist) {
-      console.log("Database tables don't exist, initializing schema...");
-      return await initializeSchema();
-    }
+    await initializeSchema();
     
     console.log("Database is initialized and ready");
-
+    
     // Now proceed with seeding data
     await seedAdminUser();
     await seedCategories();

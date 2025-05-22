@@ -1,23 +1,5 @@
 import { query } from "./connection";
 
-// Function to check if tables exist
-export const checkTablesExist = async () => {
-  try {
-    // Check if the users table exists (as a sample check)
-    const result = await query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'users'
-      );
-    `);
-    
-    return result.rows[0].exists;
-  } catch (error) {
-    console.error("Error checking if tables exist:", error);
-    return false;
-  }
-};
 
 // Function to create all necessary tables
 export const createTables = async () => {
@@ -247,7 +229,7 @@ export const createTables = async () => {
 export const dropTables = async () => {
   try {
     await query("DROP TABLE IF EXISTS password_reset_tokens CASCADE");
-    await query("DROP TABLE IF EXISTS verification_codes CASCADE");
+    await query("DROP TABLE IF EXISTS verification_codes CASCADE"); 
     await query("DROP TABLE IF EXISTS payment_verification_tokens CASCADE");
     await query("DROP TABLE IF EXISTS order_items CASCADE");
     await query("DROP TABLE IF EXISTS orders CASCADE");
@@ -271,21 +253,19 @@ export const dropTables = async () => {
 // Improved initialize schema function that doesn't drop tables in production
 export const initializeSchema = async (forceReset = true) => {
   try {
-        console.log("Force resetting database schema...");
-        await dropTables();
-      
-      
-      // Create the tables
-      const created = await createTables();
-      
-      if (!created) {
-        console.error("Failed to create tables");
-        return false;
-      }
-      
-      console.log("Database schema initialized successfully");
-      return true;
+    console.log("Force resetting database schema...");
+    await dropTables();
     
+    // Create the tables
+    const created = await createTables();
+    
+    if (!created) {
+      console.error("Failed to create tables");
+      return false;
+    }
+    
+    console.log("Database schema initialized successfully");
+    return true;
     
     console.log("Database tables already exist, skipping initialization");
     return true;
