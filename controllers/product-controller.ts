@@ -13,9 +13,7 @@ import {
   addProductImageByUrl,
   searchProductsByQuery,
   getAllProductsWithoutPagination,
-  countProducts,
   addProductSize as addNewProductSize,
-  forceDeleteProduct,
   calculateTotalStock,
   updateProductTotalStock,
 } from "../models/product"
