@@ -486,7 +486,16 @@ export const updateOrderStatusHandler = async (req: NextApiRequest, res: NextApi
 }
 export async function getOrdersHandler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    const { search, status, payment_status, start_date, end_date, page = 1, limit = 10 } = req.query
+    const {
+      search,
+      status,
+      payment_status,
+      start_date,
+      end_date,
+      page = 1,
+      limit = 10,
+      order_id, // Add support for order_id search
+    } = req.query
 
     const result = await orderModel.getAllOrders({
       search,
@@ -496,6 +505,7 @@ export async function getOrdersHandler(req: NextApiRequest, res: NextApiResponse
       end_date,
       page: Number(page),
       limit: Number(limit),
+      order_id, // Pass order_id to the model
     })
 
     return res.status(200).json(result)
@@ -504,6 +514,61 @@ export async function getOrdersHandler(req: NextApiRequest, res: NextApiResponse
     return res.status(500).json({ error: "Internal server error" })
   }
 }
+export async function createOrderAdmin(req: NextApiRequest, res: NextApiResponse) {
+  try {
+    const { user_id, shipping_address, shipping_method, payment_method, items } = req.body
+
+    // Validate required fields
+    if (!user_id || !shipping_address || !items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: "Missing required fields" })
+    }
+
+    // Validate each item has product_id and quantity
+    for (const item of items) {
+      if (!item.product_id || !item.quantity) {
+        return res.status(400).json({ error: "Each item must have product_id and quantity" })
+      }
+    }
+
+    // Create order in database
+    const order = await orderModel.createOrderFromAdmin({
+      user_id,
+      shipping_address,
+      shipping_method: shipping_method || "standard",
+      payment_method: payment_method || "card",
+      items,
+    })
+
+    return res.status(201).json(order)
+  } catch (error) {
+    console.error("Error creating order:", error)
+    return res.status(500).json({ error: "Internal server error" })
+  }
+}
+// Updated function that uses the model function
+export const deleteAllUserOrdersController = async (req: NextApiRequest, res: NextApiResponse) => {
+  try {
+    const { id } = req.query
+
+    if (!id || Array.isArray(id)) {
+      return res.status(400).json({ error: "Invalid user ID" })
+    }
+
+    const userId = Number(id)
+    const result = await orderModel.deleteAllUserOrders(userId)
+
+    return res.status(200).json(result)
+  } catch (error) {
+    console.error("Error in deleteAllUserOrdersController:", error)
+    
+    if (error instanceof Error && error.message === "User not found") {
+      return res.status(404).json({ error: "User not found" })
+    }
+    
+    return res.status(500).json({ error: "Internal server error" })
+  }
+}
+
 // Update payment status
 export const updatePaymentStatusHandler = async (req: NextApiRequest, res: NextApiResponse, orderId: string) => {
   try {

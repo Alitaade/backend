@@ -1,7 +1,7 @@
 import { query } from "../database/connection"
 import { getCartByUserId, clearCart } from "./cart"
-import type { Order, CreateOrderFromCartData, OrderWithItems } from "@/types"
-
+import type { Order, CreateOrderFromCartData, OrderWithItems, AdminOrderData } from "@/types"
+import { findUserById } from "./user"
 // Create order from cart
 export const createOrderFromCart = async (
   orderData: CreateOrderFromCartData,
@@ -256,6 +256,131 @@ export const getOrderByOrderNumber = async (orderNumber: string): Promise<OrderW
     throw error
   }
 }
+export const deleteAllUserOrders = async (userId: number): Promise<{ success: boolean; count: number; message: string }> => {
+  try {
+    // Check if user exists
+    const user = await findUserById(userId)
+    if (!user) {
+      throw new Error("User not found")
+    }
+
+    // Begin transaction
+    await query("BEGIN")
+
+    try {
+      // First delete all order items for all orders of this user
+      await query(
+        `
+        DELETE FROM order_items 
+        WHERE order_id IN (SELECT id FROM orders WHERE user_id = $1)
+        `,
+        [userId],
+      )
+
+      // Then delete all orders for this user
+      const ordersResult = await query("DELETE FROM orders WHERE user_id = $1 RETURNING id", [userId])
+
+      // Commit transaction
+      await query("COMMIT")
+
+      const deletedCount = ordersResult.rowCount || 0
+      console.log(`Successfully deleted ${deletedCount} orders for user ${userId}`)
+
+      return {
+        success: true,
+        count: deletedCount,
+        message: `Successfully deleted ${deletedCount} orders for user ${userId}`
+      }
+    } catch (error) {
+      // Rollback transaction on error
+      await query("ROLLBACK")
+      console.error(`Error deleting orders for user ${userId}:`, error)
+      throw error
+    }
+  } catch (error) {
+    console.error("Error in deleteAllUserOrders:", error)
+    throw error
+  }
+}
+
+// Create order from admin panel
+export const createOrderFromAdmin = async (orderData: AdminOrderData): Promise<OrderWithItems> => {
+  try {
+    // Start a transaction
+    await query("BEGIN")
+
+    // Generate a unique order number
+    const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+
+    // Calculate total amount
+    let totalAmount = 0
+    for (const item of orderData.items) {
+      // Get product price
+      const productResult = await query("SELECT price FROM products WHERE id = $1", [item.product_id])
+      if (productResult.rows.length === 0) {
+        throw new Error(`Product with ID ${item.product_id} not found`)
+      }
+      const productPrice = Number.parseFloat(productResult.rows[0].price)
+      totalAmount += productPrice * item.quantity
+    }
+
+    // Create the order
+    const orderResult = await query(
+      `
+      INSERT INTO orders (
+        user_id, order_number, total_amount, status, 
+        shipping_address, shipping_method, payment_method, 
+        payment_status, currency_code, currency_rate
+      ) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
+      RETURNING *
+      `,
+      [
+        orderData.user_id,
+        orderNumber,
+        totalAmount,
+        "pending",
+        orderData.shipping_address,
+        orderData.shipping_method,
+        orderData.payment_method,
+        "pending",
+        "USD", // Default to USD
+        1, // Default rate
+      ],
+    )
+
+    const order = orderResult.rows[0]
+
+    // Create order items
+    for (const item of orderData.items) {
+      // Get product details
+      const productResult = await query("SELECT name, price FROM products WHERE id = $1", [item.product_id])
+      if (productResult.rows.length === 0) {
+        throw new Error(`Product with ID ${item.product_id} not found`)
+      }
+      const product = productResult.rows[0]
+
+      await query(
+        `INSERT INTO order_items 
+        (order_id, product_id, product_name, quantity, price, size) 
+        VALUES ($1, $2, $3, $4, $5, $6)`,
+        [order.id, item.product_id, product.name, item.quantity, product.price, item.size || null],
+      )
+    }
+
+    // Commit the transaction
+    await query("COMMIT")
+
+    // Return the order with items
+    return getOrderById(order.id) as Promise<OrderWithItems>
+  } catch (error) {
+    // Rollback the transaction in case of error
+    await query("ROLLBACK")
+    console.error("Error creating order from admin:", error)
+    throw error
+  }
+}
+
 
 // Get user orders
 export const getUserOrders = async (userId: number): Promise<OrderWithItems[]> => {
@@ -419,20 +544,28 @@ export async function getAllOrders(params: {
   end_date?: string | string[]
   page?: number
   limit?: number
+  order_id?: string | string[] // Add order_id parameter
 }) {
   try {
-    const { search, status, payment_status, start_date, end_date, page = 1, limit = 10 } = params
+    const { search, status, payment_status, start_date, end_date, page = 1, limit = 10, order_id } = params
 
     // Build the SQL query
     let sqlQuery = `
       SELECT o.*, 
-             u.first_name, u.last_name, u.email
+             u.first_name, u.last_name, u.email, u.id as user_id
       FROM orders o
       LEFT JOIN users u ON o.user_id = u.id
       WHERE 1=1
     `
     const queryParams: any[] = []
     let paramIndex = 1
+
+    // Add order_id filter (exact match)
+    if (order_id) {
+      sqlQuery += ` AND o.id = $${paramIndex}`
+      queryParams.push(order_id)
+      paramIndex++
+    }
 
     // Add search filter
     if (search) {
@@ -495,6 +628,7 @@ export async function getAllOrders(params: {
       return {
         ...order,
         user: {
+          id: order.user_id,
           first_name: order.first_name,
           last_name: order.last_name,
           email: order.email,

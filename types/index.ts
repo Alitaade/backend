@@ -15,6 +15,13 @@ export interface User {
   created_at: string | Date
   updated_at: string | Date
 }
+export interface AdminOrderData {
+  user_id: number
+  shipping_address: string
+  shipping_method: string
+  payment_method: string
+  items: AdminOrderItem[]
+}
 
 export interface Category {
   id: number
@@ -62,6 +69,11 @@ export interface Cart {
   items?: CartItem[]
   user?: User
   total?: number
+}
+export interface AdminOrderItem {
+  product_id: number
+  quantity: number
+  size?: string
 }
 
 export interface CartItem {
