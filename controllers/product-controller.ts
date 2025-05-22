@@ -204,7 +204,7 @@ export const getProductTotalStock = async (req: NextApiRequest, res: NextApiResp
 
 export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
-    const { limit, offset, category_id, sort = "id", order = "asc", all = "" } = req.query
+    const { limit, offset, category_id, sort = "created_at", order = "desc", all = "" } = req.query
 
     // If the "all" parameter is provided, get all products without pagination
     if (all === "true") {
@@ -225,12 +225,15 @@ export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => 
       })
     }
 
-    const products = await getAllProductsWithoutPagination(
+    // For paginated results
+    const products = await getAllProducts(
+      limit ? Number.parseInt(limit as string) : 50, // Default to 50 if no limit provided
+      offset ? Number.parseInt(offset as string) : 0,
       category_id ? Number.parseInt(category_id as string) : undefined,
       sort as string,
-      order as string,
+      order as string
     )
-    
+
     console.log(`Returning ${products.length} products`)
 
     return res.status(200).json({ products })

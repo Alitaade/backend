@@ -263,8 +263,22 @@ export const getAllProductsWithoutPagination = async (
  * @param category_id Optional category filter
  * @returns Array of products with details
  */
-export const getAllProducts = async (limit = 1000, offset = 0, category_id?: number): Promise<ProductWithDetails[]> => {
+export const getAllProducts = async (
+  limit = 50,
+  offset = 0,
+  category_id?: number,
+  sort = "created_at",
+  order = "desc"
+): Promise<ProductWithDetails[]> => {
   try {
+    // Validate sort field to prevent SQL injection
+    const validSortFields = ["id", "name", "price", "created_at", "stock_quantity"]
+    const sortField = validSortFields.includes(sort) ? sort : "created_at"
+
+    // Validate order direction
+    const orderDirection = order.toLowerCase() === "desc" ? "DESC" : "ASC"
+
+    // Build the main products query
     let queryText = `
       SELECT p.*, c.name as category_name
       FROM products p
@@ -279,28 +293,73 @@ export const getAllProducts = async (limit = 1000, offset = 0, category_id?: num
       queryParams.push(category_id)
     }
 
-    queryText += ` ORDER BY p.created_at DESC LIMIT $${paramCounter++} OFFSET $${paramCounter++}`
+    queryText += ` ORDER BY p.${sortField} ${orderDirection} LIMIT $${paramCounter++} OFFSET $${paramCounter++}`
     queryParams.push(limit, offset)
 
+    console.log("Executing products query:", queryText, "with params:", queryParams)
     const productsResult = await query(queryText, queryParams)
     const products = productsResult.rows
+    console.log(`Products query returned ${products.length} products`)
 
-    // Get images and sizes for each product
-    const productsWithDetails: ProductWithDetails[] = []
-
-    for (const product of products) {
-      const imagesResult = await query("SELECT * FROM product_images WHERE product_id = $1 ORDER BY is_primary DESC", [
-        product.id,
-      ])
-
-      const sizesResult = await query("SELECT * FROM product_sizes WHERE product_id = $1", [product.id])
-
-      productsWithDetails.push({
-        ...product,
-        images: imagesResult.rows,
-        sizes: sizesResult.rows,
-      })
+    if (products.length === 0) {
+      return []
     }
+
+    // Extract all product IDs
+    const productIds = products.map((p) => p.id)
+
+    // Get all images for these products in a single query
+    const imagesQuery = `
+      SELECT * FROM product_images 
+      WHERE product_id = ANY($1::int[])
+      ORDER BY product_id, is_primary DESC
+    `
+    const imagesResult = await query(imagesQuery, [productIds])
+
+    // Get all sizes for these products in a single query
+    const sizesQuery = `
+      SELECT * FROM product_sizes
+      WHERE product_id = ANY($1::int[])
+      ORDER BY product_id
+    `
+    const sizesResult = await query(sizesQuery, [productIds])
+
+    console.log(`Retrieved ${imagesResult.rows.length} images and ${sizesResult.rows.length} sizes in bulk`)
+
+    // Create a map for quick lookup
+    const imagesMap = new Map()
+
+    // Process images to use direct public URLs if they have S3 keys
+    const processedImages = imagesResult.rows.map((img) => {
+      // If the image uses S3 storage, use the public URL
+      if (img.s3_key) {
+        img.image_url = getPublicObjectUrl(img.s3_key)
+      }
+      return img
+    })
+
+    // Organize images by product
+    processedImages.forEach((img) => {
+      if (!imagesMap.has(img.product_id)) {
+        imagesMap.set(img.product_id, [])
+      }
+      imagesMap.get(img.product_id).push(img)
+    })
+
+    const sizesMap = new Map()
+    sizesResult.rows.forEach((size) => {
+      if (!sizesMap.has(size.product_id)) {
+        sizesMap.set(size.product_id, [])
+      }
+      sizesMap.get(size.product_id).push(size)
+    })
+
+    // Combine everything into the final result
+    const productsWithDetails: ProductWithDetails[] = products.map((product) => ({
+      ...product,
+      images: imagesMap.get(product.id) || [],
+      sizes: sizesMap.get(product.id) || [],
+    }))
 
     return productsWithDetails
   } catch (error) {
