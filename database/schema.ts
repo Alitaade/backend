@@ -271,11 +271,9 @@ export const dropTables = async () => {
 // Improved initialize schema function that doesn't drop tables in production
 export const initializeSchema = async (forceReset = true) => {
   try {
-
-      if (forceReset) {
         console.log("Force resetting database schema...");
         await dropTables();
-      }
+      
       
       // Create the tables
       const created = await createTables();
