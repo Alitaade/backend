@@ -4,6 +4,11 @@ import { authenticateUser } from "../../../../../middleware/auth-middleware"
 import { getOrderItems } from "@/controllers/order-controller"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Set cache control headers to prevent caching
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Expires', '0')
+
   // Handle CORS preflight request
   if (req.method === "OPTIONS") {
     return res.status(200).end()

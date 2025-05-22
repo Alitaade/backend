@@ -52,11 +52,12 @@ export const getOrderItems = async (req: NextApiRequest, res: NextApiResponse, o
 
     // Get order items with product information
     const items = await orderModel.getOrderItems(orderId)
-
-    return res.status(200).json({ items })
+    return res.status(200).json({ 
+      items: items || [] 
+    })
   } catch (error) {
     console.error("Error fetching order items:", error)
-    return res.status(500).json({ error: "Internal server error" })
+    return res.status(500).json({ error: "Internal server error", items: []  })
   }
 }
 
