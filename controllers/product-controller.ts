@@ -204,7 +204,7 @@ export const getProductTotalStock = async (req: NextApiRequest, res: NextApiResp
 
 export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
-    const { limit, offset, category_id, sort = "created_at", order = "desc", all = "" } = req.query
+    const { limit, offset="0", category_id, sort = "id", order = "asc", page= "1", all = "" } = req.query
 
     // If the "all" parameter is provided, get all products without pagination
     if (all === "true") {
