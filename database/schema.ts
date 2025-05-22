@@ -269,18 +269,9 @@ export const dropTables = async () => {
 };
 
 // Improved initialize schema function that doesn't drop tables in production
-export const initializeSchema = async (forceReset = false) => {
+export const initializeSchema = async (forceReset = true) => {
   try {
-    // Check if we're running in a development environment
-    const isDevelopment = process.env.NODE_ENV !== 'production';
-    
-    // Check if tables already exist
-    const tablesExist = await checkTablesExist();
-    
-    // Only drop tables if:
-    // 1. We're in development mode AND
-    // 2. We're explicitly asked to reset OR tables don't exist
-    if ((isDevelopment && forceReset) || !tablesExist) {
+
       if (forceReset) {
         console.log("Force resetting database schema...");
         await dropTables();
@@ -296,7 +287,7 @@ export const initializeSchema = async (forceReset = false) => {
       
       console.log("Database schema initialized successfully");
       return true;
-    }
+    
     
     console.log("Database tables already exist, skipping initialization");
     return true;
