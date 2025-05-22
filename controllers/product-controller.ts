@@ -225,10 +225,10 @@ export const getProducts = async (req: NextApiRequest, res: NextApiResponse) => 
       })
     }
 
-    const products = await getAllProducts(
-      limit ? Number.parseInt(limit as string) : undefined,
-      offset ? Number.parseInt(offset as string) : undefined,
+    const products = await getAllProductsWithoutPagination(
       category_id ? Number.parseInt(category_id as string) : undefined,
+      sort as string,
+      order as string,
     )
     
     console.log(`Returning ${products.length} products`)
