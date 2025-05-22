@@ -263,7 +263,7 @@ export const getAllProductsWithoutPagination = async (
  * @param category_id Optional category filter
  * @returns Array of products with details
  */
-export const getAllProducts = async (limit = 50, offset = 0, category_id?: number): Promise<ProductWithDetails[]> => {
+export const getAllProducts = async (limit = 1000, offset = 0, category_id?: number): Promise<ProductWithDetails[]> => {
   try {
     let queryText = `
       SELECT p.*, c.name as category_name
