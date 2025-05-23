@@ -3,6 +3,7 @@ import { initializePayment } from "../../../services/paystack-service"
 import { getOrderById, updateOrderPaymentStatus } from "../../../models/order"
 import { authenticateUser } from "../../../middleware/auth-middleware"
 import { getUsdToNgnRate } from "../../../services/exchange-rate-service"
+import type { AuthenticatedRequest } from "@/types"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Handle CORS preflight request (OPTIONS)
@@ -21,9 +22,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     // Authenticate the user
     return new Promise<void>((resolve) => {
-      authenticateUser(req, res, async () => {
+      authenticateUser(req as AuthenticatedRequest, res, async () => {
         try {
-          const user = req.user
+          const user = (req as AuthenticatedRequest).user
           if (!user) {
             res.status(401).json({ error: "Unauthorized" })
             return resolve()

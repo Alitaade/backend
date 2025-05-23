@@ -11,7 +11,6 @@ import {
   getVerificationCodeByUserAndCode,
 } from "../models/verification"
 import { sendWhatsAppVerificationCode, sendPasswordResetLink } from "../services/ultramsg-service"
-import bcrypt from "bcryptjs"
 
 // Update the initiatePasswordReset function to include additional security checks
 export const initiatePasswordReset = async (req: NextApiRequest, res: NextApiResponse) => {
@@ -234,7 +233,7 @@ export const resetPassword = async (req: NextApiRequest, res: NextApiResponse) =
       return res.status(400).json({ error: "Password must be at least 8 characters long" })
     }
 
-    // Additional password validation
+    // Additional password validation - allow all special characters
     if (!/[a-z]/.test(password)) {
       return res.status(400).json({ error: "Password must contain at least one lowercase letter" })
     }
@@ -246,16 +245,18 @@ export const resetPassword = async (req: NextApiRequest, res: NextApiResponse) =
     if (!/[0-9]/.test(password)) {
       return res.status(400).json({ error: "Password must contain at least one number" })
     }
-
     if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password)) {
-      return res.status(400).json({ error: "Password must contain at least one special character" })
+      return res
+        .status(400)
+        .json({
+          error: "Password must contain at least one special character",
+        });
     }
 
     // Verify the token and get the user ID
     const userId = await verifyPasswordResetToken(token)
 
     if (!userId) {
-      // Log the attempt but return a generic error
       console.log(`Invalid reset token attempt`)
       return res.status(400).json({ error: "Invalid or expired token" })
     }
@@ -266,11 +267,8 @@ export const resetPassword = async (req: NextApiRequest, res: NextApiResponse) =
       return res.status(404).json({ error: "User not found" })
     }
 
-    // Hash the new password
-    const hashedPassword = await bcrypt.hash(password, 10)
-
-    // Update the user's password
-    await updateUser(userId, { password: hashedPassword })
+    // Update the user's password - pass the plain password, let updateUser handle hashing
+    await updateUser(userId, { password: password })
 
     // Mark the token as used
     await markTokenAsUsed(token)

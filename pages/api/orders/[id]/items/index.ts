@@ -2,6 +2,7 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { authenticateUser } from "../../../../../middleware/auth-middleware"
 import { getOrderItems } from "@/controllers/order-controller"
+import type { AuthenticatedRequest } from "@/types"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Set cache control headers to prevent caching
@@ -23,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     switch (req.method) {
       case "GET":
         return new Promise<void>((resolve, reject) => {
-          authenticateUser(req, res, async () => {
+          authenticateUser(req as unknown as AuthenticatedRequest, res, async () => {
             try {
               await getOrderItems(req, res, id)
               resolve()

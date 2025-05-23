@@ -20,16 +20,16 @@ export const deleteProduct = async (id: number | string): Promise<{ success: boo
     // If normal delete didn't work, try force delete
     console.log(`Regular delete failed for product ${id}, attempting force delete...`)
     return await forceDeleteProduct(id)
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error in deleteProduct:", error)
     //@ts-ignore
     // Check if this is a foreign key constraint error
-    if (error.code === "23503") {
+    if (error instanceof Error && error.code === "23503") {
       console.log("Foreign key constraint violation detected, attempting force delete")
       return await forceDeleteProduct(id)
     }
     //@ts-ignore
-    return { success: false, message: error.message || "Unknown error occurred" }
+    return { success: false, message: error instanceof Error ? error.message : "Unknown error occurred" }
   }
 }
 
@@ -91,22 +91,22 @@ export const forceDeleteProduct = async (id: number | string): Promise<{ success
             console.log(`Deleted image from S3: ${image.s3_key}`)
           }
         }
-      } catch (s3Error) {
+      } catch (s3Error: unknown) {
         // Log but don't fail the operation if S3 deletion fails
-        console.error("Error deleting images from S3:", s3Error)
+        console.error("Error deleting images from S3:", s3Error instanceof Error ? s3Error.message : "Unknown error")
       }
 
       return { success: true }
-    } catch (error) {
+    } catch (error: unknown) {
       // Rollback the transaction in case of error
       await query("ROLLBACK")
-      console.error("Error force deleting product:", error)
-      return { success: false, message: error.message || "Error during force delete operation" }
+      console.error("Error force deleting product:", error instanceof Error ? error.message : "Unknown error")
+      return { success: false, message: error instanceof Error ? error.message : "Error during force delete operation" }
     }
-  } catch (error) {
+  } catch (error: unknown) {
     // If we couldn't even begin the transaction
-    console.error("Error starting force delete transaction:", error)
-    return { success: false, message: error.message || "Couldn't start delete transaction" }
+    console.error("Error starting force delete transaction:", error instanceof Error ? error.message : "Unknown error")
+    return { success: false, message: error instanceof Error ? error.message : "Couldn't start delete transaction" }
   }
 }
 
@@ -123,8 +123,8 @@ export const calculateTotalStock = async (productId: number): Promise<number> =>
     )
 
     return Number.parseInt(result.rows[0].total || "0", 10)
-  } catch (error) {
-    console.error("Error calculating total stock:", error)
+  } catch (error: unknown) {
+    console.error("Error calculating total stock:", error instanceof Error ? error.message : "Unknown error")
     return 0
   }
 }
@@ -141,8 +141,8 @@ export const updateProductTotalStock = async (productId: number): Promise<boolea
     await query("UPDATE products SET stock_quantity = $1, updated_at = NOW() WHERE id = $2", [totalStock, productId])
 
     return true
-  } catch (error) {
-    console.error("Error updating product total stock:", error)
+  } catch (error: unknown) {
+    console.error("Error updating product total stock:", error instanceof Error ? error.message : "Unknown error")
     return false
   }
 }
@@ -250,8 +250,8 @@ export const getAllProductsWithoutPagination = async (
     }))
 
     return productsWithDetails
-  } catch (error) {
-    console.error("Error getting all products:", error)
+  } catch (error: unknown) {
+    console.error("Error getting all products:", error instanceof Error ? error.message : "Unknown error")
     throw error
   }
 }
@@ -362,8 +362,8 @@ export const getAllProducts = async (
     }))
 
     return productsWithDetails
-  } catch (error) {
-    console.error("Error getting all products:", error)
+  } catch (error: unknown) {
+    console.error("Error getting all products:", error instanceof Error ? error.message : "Unknown error")
     throw error
   }
 }
@@ -386,8 +386,8 @@ export const countProducts = async (category_id?: number): Promise<number> => {
     const total = Number.parseInt(result.rows[0].total, 10)
     console.log(`Total product count: ${total}${category_id ? ` for category ${category_id}` : ""}`)
     return total
-  } catch (error) {
-    console.error("Error counting products:", error)
+  } catch (error: unknown) {
+    console.error("Error counting products:", error instanceof Error ? error.message : "Unknown error")
     throw error
   }
 }
@@ -423,8 +423,8 @@ export const getProductById = async (id: number): Promise<ProductWithDetails | n
       images: imagesResult.rows,
       sizes: sizesResult.rows,
     }
-  } catch (error) {
-    console.error("Error getting product by ID:", error)
+  } catch (error: unknown) {
+    console.error("Error getting product by ID:", error instanceof Error ? error.message : "Unknown error")
     throw error
   }
 }
@@ -509,8 +509,8 @@ export const createProduct = async (
                 image.alt_text || null,
               ],
             )
-          } catch (error) {
-            console.error("Error uploading image to S3:", error)
+          } catch (error: unknown) {
+            console.error("Error uploading image to S3:", error instanceof Error ? error.message : "Unknown error")
             // Fall back to storing base64 in database if S3 upload fails
             await query(
               "INSERT INTO product_images (product_id, image_url, is_primary, width, height, alt_text) VALUES ($1, $2, $3, $4, $5, $6)",
@@ -546,12 +546,12 @@ export const createProduct = async (
 
     // Return the product with details
     return getProductById(product.id) as Promise<ProductWithDetails>
-  } catch (error) {
+  } catch (error: unknown) {
     // Rollback the transaction in case of error
     if (client) {
       await query("ROLLBACK")
     }
-    console.error("Error creating product:", error)
+    console.error("Error creating product:", error instanceof Error ? error.message : "Unknown error")
     throw error
   }
 }
@@ -621,8 +621,8 @@ export const updateProduct = async (
 
     // Return the updated product with details
     return getProductById(id)
-  } catch (error) {
-    console.error("Error updating product:", error)
+  } catch (error: unknown) {
+    console.error("Error updating product:", error instanceof Error ? error.message : "Unknown error")
     throw error
   }
 }
@@ -675,8 +675,8 @@ export const addProductImage = async (
     }
 
     return image
-  } catch (error) {
-    console.error(`Error adding image to product ${productId}:`, error)
+  } catch (error: unknown) {
+    console.error(`Error adding image to product ${productId}:`, error instanceof Error ? error.message : "Unknown error")
     throw error
   }
 }
@@ -709,15 +709,15 @@ export const deleteProductImage = async (id: number): Promise<boolean> => {
       try {
         await deleteObject(image.s3_key)
         console.log(`Deleted image from S3: ${image.s3_key}`)
-      } catch (s3Error) {
+      } catch (s3Error: unknown) {
         // Log but don't fail the operation if S3 deletion fails
-        console.error(`Error deleting image from S3: ${image.s3_key}`, s3Error)
+        console.error(`Error deleting image from S3: ${image.s3_key}`, s3Error instanceof Error ? s3Error.message : "Unknown error")
       }
     }
 
     return true
-  } catch (error) {
-    console.error("Error deleting product image:", error)
+  } catch (error: unknown) {
+    console.error("Error deleting product image:", error instanceof Error ? error.message : "Unknown error")
     throw error
   }
 }
@@ -768,12 +768,12 @@ export const updateProductSize = async (
       await query("COMMIT")
 
       return result.rows[0]
-    } catch (error) {
+    } catch (error: unknown) {
       await query("ROLLBACK")
       throw error
     }
-  } catch (error) {
-    console.error("Error updating product size:", error)
+  } catch (error: unknown) {
+    console.error("Error updating product size:", error instanceof Error ? error.message : "Unknown error")
     throw error
   }
 }
@@ -809,13 +809,13 @@ export const deleteProductSize = async (id: number): Promise<boolean> => {
       await query("COMMIT")
 
       return result.rows.length > 0
-    } catch (error) {
+    } catch (error: unknown) {
       // Rollback in case of error
       await query("ROLLBACK")
       throw error
     }
-  } catch (error) {
-    console.error("Error deleting product size:", error)
+  } catch (error: unknown) {
+    console.error("Error deleting product size:", error instanceof Error ? error.message : "Unknown error")
     throw error
   }
 }
@@ -853,12 +853,12 @@ export const setProductImageAsPrimary = async (productId: number, imageId: numbe
       await query("COMMIT")
 
       return true
-    } catch (error) {
+    } catch (error: unknown) {
       await query("ROLLBACK")
       throw error
     }
-  } catch (error) {
-    console.error("Error setting product image as primary:", error)
+  } catch (error: unknown) {
+    console.error("Error setting product image as primary:", error instanceof Error ? error.message : "Unknown error")
     throw error
   }
 }
@@ -945,8 +945,8 @@ export const searchProductsByQuery = async (searchQuery: string): Promise<Produc
     }))
 
     return productsWithDetails
-  } catch (error) {
-    console.error("Error searching products:", error)
+  } catch (error: unknown) {
+    console.error("Error searching products:", error instanceof Error ? error.message : "Unknown error")
     throw error
   }
 }
@@ -991,12 +991,12 @@ export const addProductSize = async (
       await query("COMMIT")
 
       return result.rows[0]
-    } catch (error) {
+    } catch (error: unknown) {
       await query("ROLLBACK")
       throw error
     }
-  } catch (error) {
-    console.error("Error adding product size:", error)
+  } catch (error: unknown) {
+    console.error("Error adding product size:", error instanceof Error ? error.message : "Unknown error")
     throw error
   }
 }
@@ -1067,8 +1067,8 @@ export const addProductImageByUrl = async (
       }
 
       return image
-    } catch (error) {
-      console.error("Error downloading and storing image in S3:", error)
+    } catch (error: unknown) {
+      console.error("Error downloading and storing image in S3:", error instanceof Error ? error.message : "Unknown error")
 
       // Fall back to just storing the URL
       const result = await query(
@@ -1078,8 +1078,8 @@ export const addProductImageByUrl = async (
 
       return result.rows[0]
     }
-  } catch (error) {
-    console.error("Error adding product image by URL:", error)
+  } catch (error: unknown) {
+    console.error("Error adding product image by URL:", error instanceof Error ? error.message : "Unknown error")
     throw error
   }
 }

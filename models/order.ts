@@ -427,7 +427,7 @@ export const getUserOrders = async (userId: number): Promise<OrderWithItems[]> =
 export const updateOrderStatus = async (id: number | string, status: string): Promise<Order | null> => {
   try {
     // Validate status
-    const validStatuses = ["pending", "processing", "shipped", "delivered", "cancelled"]
+    const validStatuses = ["pending", "processing", "shipped", "delivered", "cancelled", "completed"]
     if (!validStatuses.includes(status)) {
       throw new Error("Invalid status. Must be one of: pending, processing, shipped, delivered, cancelled")
     }

@@ -266,6 +266,10 @@ export const optimizeBase64Image = async (
         .toBuffer()
     }
 
+    if (!outputBuffer) {
+      return base64Data
+    }
+
     // Convert back to base64
     const optimizedBase64 = `data:image/${format};base64,${outputBuffer.toString("base64")}`
 
@@ -344,13 +348,13 @@ export const processImagesInBatches = async <T>(
             onProgress(processed, total)
           }
           return result
-        } catch (error) {
+        } catch (error: unknown) {
           console.error("Error processing item:", error)
           processed++
           if (onProgress) {
             onProgress(processed, total)
           }
-          return { error: error.message || "Unknown error" }
+          return { error: error instanceof Error ? error.message : "Unknown error" }
         }
       }),
     )

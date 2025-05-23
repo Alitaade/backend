@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next"
 import * as orderModel from "@/models/order"
 import { initializePayment, verifyPayment } from "../services/paystack-service"
 import { createVerificationToken } from "../models/token"
-import type { ExtendedNextApiRequest } from "@/types"
+import type { AuthenticatedRequest, ExtendedNextApiRequest } from "@/types"
 
 // Create order
 export const createOrder = async (req: NextApiRequest, res: NextApiResponse) => {
@@ -175,10 +175,11 @@ export const updatePaymentStatus = async (req: NextApiRequest, res: NextApiRespo
   }
 }
 
-export const updateOrderPaymentStatusAdmin = async (req: AuthenticatedRequest, res: NextApiResponse) => {
+export const updateOrderPaymentStatusAdmin = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
     const { id } = req.query
     const { paymentStatus, paymentReference } = req.body
+    const authReq = req as unknown as AuthenticatedRequest
 
     if (!id) {
       return res.status(400).json({ error: "Order ID is required" })
@@ -196,12 +197,12 @@ export const updateOrderPaymentStatusAdmin = async (req: AuthenticatedRequest, r
     }
 
     // Check if authentication middleware set the user
-    if (!req.user || !req.user.id) {
+    if (!authReq.user || !authReq.user.id) {
       console.log("User not authenticated or user ID missing")
       return res.status(401).json({ error: "Unauthorized - User not authenticated" })
     }
 
-    console.log(`Updating payment status for order ${orderId} by user ${req.user.id}`)
+    console.log(`Updating payment status for order ${orderId} by user ${authReq.user.id}`)
 
     // Get the order to check ownership
     const order = await orderModel.getOrderById(orderId)
@@ -211,8 +212,8 @@ export const updateOrderPaymentStatusAdmin = async (req: AuthenticatedRequest, r
     }
 
     // Check if the order belongs to the authenticated user or if the user is an admin
-    if (String(order.user_id) !== String(req.user.id) && !req.user.is_admin) {
-      console.log(`User ${req.user.id} is not authorized to update order ${orderId} belonging to user ${order.user_id}`)
+    if (String(order.user_id) !== String(authReq.user.id) && !authReq.user.is_admin) {
+      console.log(`User ${authReq.user.id} is not authorized to update order ${orderId} belonging to user ${order.user_id}`)
       return res.status(403).json({ error: "Forbidden - You do not have permission to update this order" })
     }
 
@@ -272,7 +273,7 @@ export const updatePaymentStatuss = async (req: NextApiRequest, res: NextApiResp
 // Initialize Paystack payment
 export const initializePaystackPayment = async (req: ExtendedNextApiRequest, res: NextApiResponse) => {
   try {
-    const { order_id } = req.body
+    const { order_id } = (req.body as unknown as { order_id: string })
     const userId = req.user?.id
 
     if (!order_id || !userId) {
@@ -292,8 +293,8 @@ export const initializePaystackPayment = async (req: ExtendedNextApiRequest, res
     }
 
     // Determine the callback URL based on the request origin
-    // Fix the type error by ensuring we always pass a string to the function
-    const origin = (req.headers.origin || req.headers.referer || "http://localhost:3000") as string
+    const headers = req.headers as unknown as { origin?: string; referer?: string }
+    const origin = headers.origin || headers.referer || "http://localhost:3000"
     const callbackUrl = `${origin}/checkout/callback`
 
     // Initialize payment with Paystack

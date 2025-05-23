@@ -23,6 +23,13 @@ import formidable from "formidable";
 import { uploadBuffer } from "../services/backup"
 import fs from "fs";
 
+const formidableConfig = {
+  maxFileSize: 10 * 1024 * 1024, // 10MB
+  keepExtensions: true,
+  multiples: true,
+  uploadDir: "/tmp",
+  encoding: "utf-8"
+}
 
 export const config = {
   api: {
@@ -89,7 +96,7 @@ export const deleteExistingProduct = async (req: NextApiRequest, res: NextApiRes
     return res.status(200).json({
       message: "Product deleted successfully",
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error deleting product:", error)
     return res.status(500).json({ 
       error: "Internal server error", 
@@ -129,7 +136,7 @@ export const createNewProduct = async (req: NextApiRequest, res: NextApiResponse
       : undefined
 
     // Calculate total stock from sizes
-    const totalStock = sizes ? sizes.reduce((sum, size) => sum + (Number.parseInt(size.stock_quantity) || 0), 0) : 0
+    const totalStock = sizes ? sizes.reduce((sum: number, size: { stock_quantity: string | number }) => sum + (Number.parseInt(String(size.stock_quantity)) || 0), 0) : 0
 
     const product = await createProduct(
       { name, description, price, category_id, stock_quantity: totalStock },
@@ -577,7 +584,7 @@ export const handleOctetStreamUpload = async (req: NextApiRequest, res: NextApiR
       processingTimeMs: processingTime,
       uploadedFile: image,
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Server error in handleOctetStreamUpload:", error)
     return res.status(500).json({ error: `Server error: ${error.message}` })
   }
@@ -605,8 +612,7 @@ export const handleFormDataUpload = async (req: NextApiRequest, res: NextApiResp
       encoding: "utf-8",
       uploadDir: "/tmp",
       filter: (part) => {
-        // Log all parts for debugging
-        console.log(`Received form part: ${part.name}, filename: ${part.filename}`)
+
         return true
       },
     })
@@ -634,12 +640,7 @@ export const handleFormDataUpload = async (req: NextApiRequest, res: NextApiResp
                 })),
               )
             } else {
-              console.log(`File '${key}':`, {
-                name: fileObj.originalFilename,
-                size: fileObj.size,
-                path: fileObj.filepath,
-                type: fileObj.mimetype,
-              })
+             
             }
           }
           resolve([fields, files])
@@ -698,9 +699,8 @@ export const handleFormDataUpload = async (req: NextApiRequest, res: NextApiResp
       // Process files in batches for better performance
       for (let i = 0; i < fileArray.length; i++) {
         const file = fileArray[i]
+        if (!file) continue;
         try {
-          console.log(`Processing file: ${file.originalFilename}, size: ${file.size} bytes, path: ${file.filepath}`)
-
           // Check if file exists and has content
           if (!file.filepath || file.size === 0) {
             throw new Error(`Invalid file at index ${i}: empty or missing file data`)
@@ -736,7 +736,7 @@ export const handleFormDataUpload = async (req: NextApiRequest, res: NextApiResp
 
           // Clean up temp file
           await fs.promises.unlink(file.filepath)
-        } catch (error) {
+        } catch (error: any) {
           console.error(`File upload error for ${file.originalFilename || "unknown file"}:`, error.message)
           errors.push(`Error with file ${file.originalFilename || `at index ${i}`}: ${error.message}`)
         }
@@ -759,7 +759,7 @@ export const handleFormDataUpload = async (req: NextApiRequest, res: NextApiResp
       uploadedFiles: uploadedFiles, // For multiple files endpoint
       errors: errors.length > 0 ? errors : undefined,
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Server error in handleFormDataUpload:", error)
     return res.status(500).json({ error: `Server error: ${error.message}` })
   }
@@ -808,7 +808,7 @@ export const handleJsonUpload = async (req: NextApiRequest, res: NextApiResponse
                   defaultAltText,
                 )
                 return { image }
-              } catch (error) {
+              } catch (error: any) {
                 console.error(`Base64 image ${index + 1} error:`, error.message)
                 return { error: `Error with base64 image ${index + 1}: ${error.message}` }
               }
@@ -831,7 +831,7 @@ export const handleJsonUpload = async (req: NextApiRequest, res: NextApiResponse
                   defaultAltText,
                 )
                 return { image }
-              } catch (error) {
+              } catch (error: any) {
                 console.error(`URL ${index + 1} error:`, error.message)
                 return { error: `Error with URL ${index + 1}: ${error.message}` }
               }
@@ -862,7 +862,7 @@ export const handleJsonUpload = async (req: NextApiRequest, res: NextApiResponse
       uploadedUrls,
       errors: errors.length > 0 ? errors : undefined,
     })
-  } catch (error) {
+  } catch (error: any) {
     if (error.name === "SyntaxError") {
       console.error("JSON parsing error:", error)
       return res.status(400).json({ error: `Invalid JSON: ${error.message}` })
@@ -894,7 +894,7 @@ export const processUpload = async (req: NextApiRequest, res: NextApiResponse) =
         message: "Only JSON, application/octet-stream, or multipart/form-data payloads are supported.",
       })
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in processUpload:", error)
     return res.status(500).json({ error: `Server error: ${error.message}` })
   }
@@ -936,7 +936,7 @@ export const handleUrlUpload = async (req: NextApiRequest, res: NextApiResponse)
       message: "Image added successfully",
       image,
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in handleUrlUpload:", error)
     return res.status(500).json({ error: `Server error: ${error.message}` })
   }

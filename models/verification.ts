@@ -133,7 +133,7 @@ export const checkRateLimit = async (userId: number): Promise<boolean> => {
     )
 
     const count = Number.parseInt(result.rows[0].count)
-    return count < 3 // Allow up to 3 requests per hour
+    return count < 6 // Allow up to 3 requests per hour
   } catch (error) {
     console.error("Error checking rate limit:", error)
     return false

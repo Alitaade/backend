@@ -20,7 +20,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
     req.query.id = orderNumber.toString();
     // Get the order to verify it exists and get the ID
-    const order = await getOrderByNumber(req, res);
+    const response = (await getOrderByNumber(req, res) as unknown) as { order?: { id: number; order_number: string } };
+    const order = response?.order;
+    
     if (!order) {
       console.log(`Error: Order not found for order number: ${orderNumber}`);
       return res.status(404).json({

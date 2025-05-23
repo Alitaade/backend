@@ -34,6 +34,7 @@ export default async function handler(req: AuthenticatedRequest, res: NextApiRes
     // Authenticate user for all protected routes
     return new Promise<void>((resolve) => {
       authenticateUser(req, res, async () => {
+        
         try {
           // Check if authentication middleware set the user
           if (!req.user || !req.user.id) {

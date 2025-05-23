@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next"
-import jwt from "jsonwebtoken"
+import jwt, { SignOptions } from "jsonwebtoken"
 import { OAuth2Client } from "google-auth-library"
 import {
   findUserByEmail,
@@ -11,10 +11,10 @@ import {
 } from "../models/user"
 
 // JWT configuration
-const JWT_SECRET: string = process.env.JWT_SECRET
-const JWT_EXPIRES_IN: string | number = process.env.JWT_EXPIRES_IN
+const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_key"
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "24h"
 // Google OAuth client
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID || "")
 
 export const login = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
@@ -41,7 +41,9 @@ export const login = async (req: NextApiRequest, res: NextApiResponse) => {
 
     // Convert to strings and trim
     if (email) email = String(email).trim()
-    if (password) password = String(password)
+    if (password) {
+      password = String(password).trim()
+    }
 
     // Validate required fields
     if (!email || !password) {
@@ -51,20 +53,32 @@ export const login = async (req: NextApiRequest, res: NextApiResponse) => {
     // Find user by email
     const user = await findUserByEmail(email)
     if (!user) {
+      console.log("Login attempt failed - User not found:", email)
       return res.status(401).json({ error: "Invalid credentials" })
     }
 
+    console.log("Found user:", {
+      id: user.id,
+      email: user.email,
+      hasPassword: !!user.password,
+      passwordHash: user.password
+    })
+
     // Validate password
     const isPasswordValid = await validatePassword(user, password)
+    console.log("Password validation result:", isPasswordValid)
+
     if (!isPasswordValid) {
       console.log("Invalid password for user:", email)
       return res.status(401).json({ error: "Invalid credentials" })
     }
 
     // Generate JWT token
-    const token = jwt.sign({ userId: user.id, email: user.email, isAdmin: user.is_admin }, JWT_SECRET, {
-      expiresIn: JWT_EXPIRES_IN,
-    })
+    const token = jwt.sign(
+      { userId: user.id, email: user.email, isAdmin: user.is_admin },
+      JWT_SECRET as jwt.Secret,
+      { expiresIn: JWT_EXPIRES_IN } as SignOptions
+    )
 
     // Return user data (excluding password) and token
     const { password: _, ...userWithoutPassword } = user
@@ -107,9 +121,11 @@ export const register = async (req: NextApiRequest, res: NextApiResponse) => {
     })
 
     // Generate JWT token
-    const token = jwt.sign({ userId: newUser.id, email: newUser.email, isAdmin: newUser.is_admin }, JWT_SECRET, {
-      expiresIn: JWT_EXPIRES_IN,
-    })
+    const token = jwt.sign(
+      { userId: newUser.id, email: newUser.email, isAdmin: newUser.is_admin },
+      JWT_SECRET as jwt.Secret,
+      { expiresIn: JWT_EXPIRES_IN } as SignOptions
+    )
 
     // Return user data (excluding password) and token
     const { password: _, ...userWithoutPassword } = newUser
@@ -212,9 +228,11 @@ export const googleAuth = async (req: NextApiRequest, res: NextApiResponse) => {
     }
 
     // Generate JWT token
-    const jwtToken = jwt.sign({ userId: user.id, email: user.email, isAdmin: user.is_admin }, JWT_SECRET, {
-      expiresIn: JWT_EXPIRES_IN,
-    })
+    const jwtToken = jwt.sign(
+      { userId: user.id, email: user.email, isAdmin: user.is_admin },
+      JWT_SECRET as jwt.Secret,
+      { expiresIn: JWT_EXPIRES_IN } as SignOptions
+    )
 
     // Return user data and token
     const { password: _, ...userWithoutPassword } = user

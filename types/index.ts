@@ -1,3 +1,4 @@
+import type { NextApiRequest } from 'next'
 // Core data models
 export interface User {
   id: number
@@ -372,11 +373,16 @@ export interface DecodedToken {
   exp?: number
 }
 
-export interface AuthenticatedRequest extends Request {
+export interface AuthenticatedRequest extends NextApiRequest {
   user?: {
     id: number
     email: string
     is_admin: boolean
+    first_name?: string
+    last_name?: string
+    phone?: string
+    whatsapp?: string
+    country?: string
   }
 }
 

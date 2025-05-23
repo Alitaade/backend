@@ -24,12 +24,12 @@ const PUBLIC_DOMAIN = process.env.PUBLIC_DOMAIN || ""
 
 // Initialize S3 client
 const s3Client = new S3Client({
-  region: S3_REGION,
+  region: S3_REGION as string,
   credentials: {
-    accessKeyId: S3_ACCESS_KEY,
-    secretAccessKey: S3_SECRET_KEY,
+    accessKeyId: S3_ACCESS_KEY as string,
+    secretAccessKey: S3_SECRET_KEY as string,
   },
-  endpoint: S3_ENDPOINT,
+  endpoint: S3_ENDPOINT as string,
 })
 
 /**
@@ -114,9 +114,9 @@ export const uploadBuffer = async (
     const url = getPublicObjectUrl(key)
 
     return { key, url }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error uploading buffer to S3:", error)
-    throw new Error(`Failed to upload file to storage: ${error.message}`)
+    throw new Error(`Failed to upload file to storage: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 }
 
@@ -144,9 +144,9 @@ export const uploadBase64 = async (
     const buffer = Buffer.from(matches[2], "base64")
 
     return await uploadBuffer(buffer, mimeType, filename, metadata)
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error uploading base64 to S3:", error)
-    throw new Error(`Failed to upload base64 to storage: ${error.message}`)
+    throw new Error(`Failed to upload base64 to storage: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 }
 
@@ -164,9 +164,9 @@ export const getSignedObjectUrl = async (key: string, expiresIn = S3_URL_EXPIRAT
     })
 
     return await getSignedUrl(s3Client, command, { expiresIn })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error generating signed URL:", error)
-    throw new Error(`Failed to generate signed URL: ${error.message}`)
+    throw new Error(`Failed to generate signed URL: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 }
 
@@ -202,9 +202,9 @@ export const downloadObject = async (key: string): Promise<Buffer> => {
       stream.on("error", reject)
       stream.on("end", () => resolve(Buffer.concat(chunks)))
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error downloading object from S3:", error)
-    throw new Error(`Failed to download file: ${error.message}`)
+    throw new Error(`Failed to download file: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -222,9 +222,9 @@ export const deleteObject = async (key: string): Promise<boolean> => {
       }),
     )
     return true
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error deleting object from S3:", error)
-    throw new Error(`Failed to delete file: ${error.message}`)
+    throw new Error(`Failed to delete file: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -246,9 +246,9 @@ export const deleteMultipleObjects = async (keys: string[]): Promise<boolean> =>
       }),
     )
     return true
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error deleting multiple objects from S3:", error)
-    throw new Error(`Failed to delete files: ${error.message}`)
+    throw new Error(`Failed to delete files: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -267,9 +267,9 @@ export const listObjects = async (prefix = "products/"): Promise<string[]> => {
     )
 
     return (data.Contents || []).map((item) => item.Key).filter(Boolean) as string[]
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error listing objects in S3:", error)
-    throw new Error(`Failed to list files: ${error.message}`)
+    throw new Error(`Failed to list files: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -287,8 +287,8 @@ export const objectExists = async (key: string): Promise<boolean> => {
       }),
     )
     return true
-  } catch (error) {
-    if (error.name === "NoSuchKey") {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === "NoSuchKey") {
       return false
     }
     throw error

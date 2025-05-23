@@ -39,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               if (!res.writableEnded) {
                 res.status(500).json({
                   error: "Failed to process image",
-                  message: error.message || "Unknown error",
+                  message: error instanceof Error ? error.message : "Unknown error",
                 });
               }
               resolve();

@@ -125,8 +125,9 @@ export const updateUser = async (id: number, userData: Partial<UserInput>): Prom
       queryParams.push(userData.email)
     }
 
-    if (userData.password !== undefined) {
-      const hashedPassword = userData.password ? await bcrypt.hash(userData.password, 10) : null
+    if (userData.password !== undefined && typeof userData.password === 'string') {
+      // Only hash if we have a valid string password
+      const hashedPassword = await bcrypt.hash(userData.password, 10)
       updates.push(`password = $${paramCounter++}`)
       queryParams.push(hashedPassword)
     }
@@ -206,11 +207,26 @@ export const deleteUser = async (id: number): Promise<boolean> => {
 
 export const validatePassword = async (user: User, password: string): Promise<boolean> => {
   try {
-    if (!user.password) return false
-    return await bcrypt.compare(password, user.password)
+    if (!user.password) {
+      console.log("No password found for user:", user.email);
+      return false;
+    }
+    
+    console.log("Password validation details:", {
+      userId: user.id,
+      email: user.email,
+      inputPasswordLength: password.length,
+      storedHash: user.password,
+      hashLength: user.password.length
+    });
+    
+    const result = await bcrypt.compare(password, user.password);
+    console.log("Bcrypt comparison result:", result);
+    
+    return result;
   } catch (error) {
-    console.error("Error validating password:", error)
-    throw error
+    console.error("Error validating password:", error);
+    throw error;
   }
 }
 

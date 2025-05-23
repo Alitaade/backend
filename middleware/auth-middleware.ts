@@ -15,7 +15,7 @@ if (!JWT_SECRET) {
 export const authenticateUser = (req: AuthenticatedRequest, res: NextApiResponse, next: () => void) => {
   try {
     // Get token from Authorization header
-    const authHeader = req.headers.authorization
+    const authHeader = (req.headers as { authorization?: string }).authorization
     console.log("Auth header:", authHeader)
 
     if (!authHeader) {
@@ -100,7 +100,7 @@ export const requireAdmin = (req: AuthenticatedRequest, res: NextApiResponse, ne
 export function authMiddleware(handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void) {
   return (req: AuthenticatedRequest, res: NextApiResponse) => {
     // Create a "next" function that calls the handler
-    const next = () => handler(req, res)
+    const next = () => handler(req as unknown as NextApiRequest, res)
 
     // Apply the authentication middleware
     authenticateUser(req, res, next)
@@ -110,7 +110,7 @@ export function authMiddleware(handler: (req: NextApiRequest, res: NextApiRespon
 export function requireAdminMiddleware(handler: (req: NextApiRequest, res: NextApiResponse) => Promise<void> | void) {
   return (req: AuthenticatedRequest, res: NextApiResponse) => {
     // Create a "next" function that calls the handler
-    const next = () => handler(req, res)
+    const next = () => handler(req as unknown as NextApiRequest, res)
 
     // Apply the admin authorization middleware
     requireAdmin(req, res, next)

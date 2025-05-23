@@ -23,7 +23,7 @@ export const initializePayment = async (
   callbackUrl: string,
   currencyCode = "NGN", // Default to NGN since that's what Paystack primarily supports
   exchangeRate = 1,
-  additionalMetadata = {},
+  additionalMetadata: { usd_conversion_rate?: number; [key: string]: any } = {},
 ): Promise<PaystackPaymentResponse> => {
   try {
     let formattedAmount = Math.round(amount * 100)

@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "description": "Backend API for fashion e-commerce website",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3001",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3001",
     "lint": "next lint",
     "seed": "ts-node database/seed.ts",
     "tsc": "echo 'Skipping tsc check for Netlify'"
@@ -50,6 +50,7 @@
     "@types/react-dom": "latest",
     "@types/uuid": "^9.0.7",
     "ts-node": "^10.9.2",
+    "@types/qs": "^6.9.11",
     "@types/next": "latest",
     "typescript": "latest"
   },

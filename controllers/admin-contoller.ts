@@ -2,6 +2,8 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import * as adminModel from "@/models/admin"
 import { generateCSV } from "../utils/csv-utils"
+import type { AuthenticatedRequest } from "@/types"
+
 // Admin dashboard statistics
 export const getDashboardStats = async (req: NextApiRequest, res: NextApiResponse) => {
   try {
@@ -18,6 +20,7 @@ export const toggleUserAdminStatus = async (req: NextApiRequest, res: NextApiRes
   try {
     const { id } = req.query
     const { is_admin } = req.body
+    const authReq = req as unknown as AuthenticatedRequest
 
     if (!id) {
       return res.status(400).json({ error: "User ID is required" })
@@ -28,7 +31,7 @@ export const toggleUserAdminStatus = async (req: NextApiRequest, res: NextApiRes
     }
 
     // Get the current user to check if they're trying to remove their own admin status
-    const requestingUser = req.user
+    const requestingUser = authReq.user
     if (Number(id) === requestingUser?.id && !is_admin) {
       return res.status(400).json({ error: "You cannot remove your own admin status" })
     }

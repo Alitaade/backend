@@ -127,7 +127,7 @@ export const updateUserPassword = async (
         .status(400)
         .json({ error: "Password must contain at least one number" });
     }
-
+    
     if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(newPassword)) {
       return res
         .status(400)
@@ -135,7 +135,6 @@ export const updateUserPassword = async (
           error: "Password must contain at least one special character",
         });
     }
-
     const userId = Number(id);
     const user = await findUserById(userId);
 
