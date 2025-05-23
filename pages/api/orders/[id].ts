@@ -1,5 +1,5 @@
 import type { NextApiResponse } from "next"
-import { authenticateUser } from "@/middleware/auth-middleware"
+import { enableCors } from "@/middleware/auth-middleware"
 import { 
   getOrder, 
   getOrderByNumber,   
@@ -33,7 +33,7 @@ export default async function handler(req: AuthenticatedRequest, res: NextApiRes
 
     // Authenticate user for all protected routes
     return new Promise<void>((resolve) => {
-      authenticateUser(req, res, async () => {
+      enableCors(req, res, async () => {
         try {
           // Check if authentication middleware set the user
           if (!req.user || !req.user.id) {
