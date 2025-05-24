@@ -544,7 +544,7 @@ export async function getAllOrders(params: {
   end_date?: string | string[]
   page?: number
   limit?: number
-  order_id?: string | string[] // Add order_id parameter
+  order_id?: string | string[] // This will now be treated as order_number
 }) {
   try {
     const { search, status, payment_status, start_date, end_date, page = 1, limit = 10, order_id } = params
@@ -560,9 +560,9 @@ export async function getAllOrders(params: {
     const queryParams: any[] = []
     let paramIndex = 1
 
-    // Add order_id filter (exact match)
+    // Add order_id filter (now treating it as order_number)
     if (order_id) {
-      sqlQuery += ` AND o.id = $${paramIndex}`
+      sqlQuery += ` AND o.order_number = $${paramIndex}`
       queryParams.push(order_id)
       paramIndex++
     }
